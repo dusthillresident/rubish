@@ -1,0 +1,60 @@
+
+# Prompt (aka REPL) for 'Rubish'
+
+
+# Let's make backups of all the built in commands used by this program, in case the user redefines them during their prompt session
+set _get-line @get-line
+set _stdin stdin
+set _stdout stdout
+set _cat$ @cat$
+set _set @set
+set _while @while
+set _print @print
+set _for @for
+set _range$ @range$
+set _local @local
+set _equal$ @equal$
+set _catch @catch
+set _eval @eval
+set _if @if
+set _file-eof @file-eof
+set _length @length
+set _+ @+
+set _neg @neg
+set _func @func
+set _&& @&&
+set _! @!
+set _error-message @error-message
+set _|| @||
+
+_set _keep_running 1
+_func quit () (_set _keep_running 0)
+
+_func _paren-count( s )(
+ _local count (0) c;
+ _for (i 0 _length s) (
+  _set c range$ s i;
+  _set count _+ count _equal$ c "(" _neg _equal$ c ")"
+ )
+ count
+)
+
+_set _eval_string ""
+
+_print "Rubish prompt";
+_print "(C)2024 Rubish";
+_print ;
+
+_while ( _&& _! _file-eof _stdin _keep_running ) (
+ ;(_print "> ")
+ _while ( _&& _! _file-eof _stdin _|| _paren-count _eval_string _! _length _eval_string ) (
+  _set _eval_string _cat$ _eval_string _get-line _stdin
+ )
+ _set _return_value 0
+ _if (_catch ( _set _return_value _eval _eval_string )) (
+  _print "Error:" _error-message;
+ )(
+  _print _stdout @_return_value;
+ )
+ _set _eval_string ""
+)
