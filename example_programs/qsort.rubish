@@ -1,0 +1,37 @@
+
+
+set a array 16;
+
+for (i 0 length a) (
+ set a[i] int rnd 100
+)
+
+
+func swap(@a @b)( local c (a); set a b; set b c )
+
+func partition(a lo hi)(
+ local pivot (a[hi]) i (lo);
+ for (j lo hi) (
+  if <= a[j] pivot (
+   swap a[i] a[j]
+   set i + i 1
+  )
+ )
+ swap a[i] a[hi]
+ i
+)
+
+func quicksort( a lo hi )(
+ if !(|| >= lo hi < lo 0) (
+  local p (partition a lo hi);
+  quicksort a lo (- p 1)
+  quicksort a (+ p 1) hi 
+ )
+)
+
+quicksort a 0 + -1 length a;
+
+foreach i a (
+ ;(print i)(print " ")
+)
+print ;
