@@ -1,0 +1,24 @@
+
+# Wozniak's method of computing the value of 'e'
+# https://archive.org/details/byte-magazine-1981-06/page/n393/mode/1up?view=theater
+
+func compute-e (d) (
+ local e (0);
+ for(d d 1 -1)(
+  set e + e 1;
+  set e / e d;
+ )
+ + e 2
+)
+
+set n 2;
+set last 0;
+set this 1;
+while(!= last this)(
+ set last compute-e n;
+ set n + n 1;
+ set this compute-e n;
+)
+print "n is "n;
+
+(print "e = ") print compute-e n;
