@@ -1,0 +1,53 @@
+
+#  ansi2.rubish - Plot random 'pixels' in the terminal window using unicode characters and ANSI escape codes
+
+# Set the text colour using ansi
+func ansiColour(c)(
+ print cat$ chr$ 0x1b "[" str$ int c "m"
+)
+
+func ansiCursor(x y)(
+ print cat$  chr$ 0x1b "["  str$ int(+ 1 y) ";"  str$ int(+ 1 x) "H"
+)
+
+# Uncomment in order to hide the cursor
+# print cat$ chr$ 0x1b "[2J";
+# print cat$ chr$ 0x1b "[?25l";
+
+# The width and height of the 'screen'.
+set ww 100
+set hh 40
+
+# You can specify the width and height of the 'screen' using command line arguments
+if = 2 length command-line (
+ set ww val$ command-line[0]
+ set hh val$ command-line[1]
+)
+
+# We'll use this array to remember what pixels have already been plotted.
+# The 'screen' is divided into 2x2 blocks of pixels.
+# Every cell in the array will be a bit field, represnting which pixels in the block are 'on'.
+set pix  array ww hh;
+
+# Each value from our 'pix' array will be used as an index into this table of characters.
+set b  make-array " " "▘" "▝" "▀" "▖" "▌" "▞" "▛" "▗" "▚" "▐" "▜" "▄" "▙" "▟" "█";
+
+# Plot a pixel on the 'screen'.  
+func plot(x y)(
+ local xx (& x 1) yy (& y 1);
+ local v ( <<  (<< 1 xx)  (<< yy 1) );
+ set x % >> x 1 ww;
+ set y % >> y 1 hh;
+ if ! = pix[x y] 15 (
+  set pix[x y]  | pix[x y] v;
+  ansiCursor (+ 1 x) (+ y 1);
+  print b[ pix[x y] ];
+ )
+)
+
+# Loop forever while plotting random 'pixels' on the 'screen'
+while 1 (
+ plot rnd << ww 1 rnd << hh 1;
+ wait 17
+)
+
