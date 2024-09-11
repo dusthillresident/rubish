@@ -1,0 +1,23 @@
+
+# 'Rubish' allows you to pass variables by reference, using '@' in the list of parameters for a function
+func inc( @x )(
+ set x + x 1
+)
+
+# 'Rubish' also lets you make "vararg" functions, using '.' followed by a name at the end of the list of parameters for a function.
+# The variable will contain a 1-dimensional array containing the rest of the arguments.
+# If no other arguments are given, the variable will contain '[UNDEFINED]', which is a special type of value in 'Rubish'.
+func this( aa bb . cc )(
+ print "'this' called with these arguments:" aa bb cc;
+ local c (0);
+ if cc (
+  print "Contents of the rest array:";
+  foreach i cc (
+   print (inc c) ":" i;
+  )
+ )
+)
+
+this "one" "two" "three" "four" "five" "six";
+
+this 11 22;
