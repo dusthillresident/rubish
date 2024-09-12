@@ -1,5 +1,5 @@
 #define RUBISH_NOT_STANDALONE
-#include "../l.c"
+#include "../rubish.c"
 
 #include "sdl2.c"
 
