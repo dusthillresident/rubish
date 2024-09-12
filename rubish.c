@@ -7,11 +7,43 @@
 //#include <fcntl.h>
 #include <poll.h>
 
+// memory problem debugging stuff
+#define MEMORY_DEBUG 0
+#if MEMORY_DEBUG
+ FILE *MEMORY_DEBUG_OUT = NULL;
+ void START_MEMORY_DEBUG(){
+  MEMORY_DEBUG_OUT = fopen("MEMORY_DEBUG_OUT.TXT","wb");
+ }
+ void* mymallocfordebug(size_t size    ,int n, char *f,char *fun){
+  void *out = malloc(size);
+  fprintf(MEMORY_DEBUG_OUT, "line %d,	%s,	%s,	MALLOC	%p\n",n,f,fun,out);  fflush( MEMORY_DEBUG_OUT );
+  return out;
+ }
+ void* mycallocfordebug(size_t nmemb, size_t size    ,int n, char *f,char *fun){
+  void *out = calloc(nmemb,size);
+  fprintf(MEMORY_DEBUG_OUT, "line %d,	%s,	%s,	CALLOC	%p\n",n,f,fun,out);  fflush( MEMORY_DEBUG_OUT );
+  return out;
+ }
+ void* myreallocfordebug(void *ptr, size_t size    ,int n, char *f,char *fun,char *name){
+  void *out = realloc(ptr,size);
+  fprintf(MEMORY_DEBUG_OUT, "line %d,	%s,	%s,	REALLOC	%p ( input %p )	'%s'\n",n,f,fun,out,ptr,name);  fflush( MEMORY_DEBUG_OUT );
+  return out;
+ }
+ void myfreefordebug(void *ptr,      int n, char *f,char *fun,char *name){
+  fprintf(MEMORY_DEBUG_OUT, "line %d,	%s,	%s,	FREEING	%p	'%s'\n",n,f,fun,ptr,name);  fflush( MEMORY_DEBUG_OUT );
+  free(ptr);
+ }
+ #define malloc(a) mymallocfordebug(a,__LINE__,__FILE__,(char*)__FUNCTION__)
+ #define calloc(a,b) mycallocfordebug(a,b,__LINE__,__FILE__,(char*)__FUNCTION__)
+ #define realloc(a,b) myreallocfordebug(a,b,__LINE__,__FILE__,(char*)__FUNCTION__,#a)
+ #define free(p) myfreefordebug(p,__LINE__,__FILE__,(char*)__FUNCTION__,#p)
+#endif
+
 #define MAIN_PRINT_RESULT 1
 
 struct string; struct item; struct var; struct interp; struct func; struct array;
 // if refCount is not NULL, that means it is a heap string and requires free() management
-struct string { unsigned char *refCount; unsigned int length; char *s; };
+struct string { unsigned int *refCount; unsigned int length; char *s; };
 enum fileportFlags { FPWRITE = 0b1, FPREAD = 0b10, FPREADWRITE = 0b11, FPMANAGED = 0b100 };
 struct fileport { unsigned int refCount; FILE* fp; int flags; };
 enum itemType { UNDEFINED, NOTHING, SYMBOL, NUMBER, STRING, FUNCTION, ARRAY, FILEPORT, ERROR,   LPAREN, RPAREN, LBRACKET, RBRACKET, STOP, REF };
@@ -269,16 +301,16 @@ struct item  lookupValueByName( struct interp *interp, struct string *name ){
 
 struct string newCopyOfString( struct string source ){
  struct string out = source;
- out.refCount = calloc(1,sizeof(unsigned int)); *out.refCount=1;  out.s = calloc( out.length+1, sizeof(char) );
- strncpy( out.s, source.s, out.length );
+ out.refCount = malloc( sizeof(unsigned int) );  *out.refCount=1;  out.s = calloc( out.length+1, sizeof(char) );
+ strncpy( out.s, source.s, source.length );
  return out;
 }
 
-struct string newInstanceOfString( struct string source ){
- struct string out = source;
- if( source.refCount ) *source.refCount += 1;
- return out;
-}
+//struct string newInstanceOfString( struct string source ){
+// struct string out = source;
+// if( source.refCount ){  *source.refCount += 1; /*if( ! *source.refCount ){  printf( "oh no!!! string refCount overflowed!!\n" );  exit(1);  }*/  }
+// return out;
+//}
 
 
 void storeItem( struct item *dest, struct item *item, struct array *parentArray ){
@@ -316,7 +348,7 @@ struct var* makeRefVar( struct interp *interp, struct item *target, struct strin
  struct var *newVar = calloc( 1, sizeof(struct var) );  newVar->contextLevel = interp->contextLevel;
  newVar->value = target;
  newVar->flags = VARLOCAL | VARREF;
- newVar->name = newInstanceOfString( name );
+ newVar->name = name;  newVar->name.refCount = NULL; //newInstanceOfString( name );
  if( parentArray ){  newVar->parentArray = parentArray;  parentArray->refCount += 1;  }
  return newVar;
 }
@@ -618,7 +650,7 @@ struct var*  makeLocalVar( struct interp *interp, struct item value,  struct str
  newVar->value = calloc( 1, sizeof(struct item) );
  // Store the value without incrementing refCount. The 'free floating instance' is converted immediately into the 'stored instance' inside this local var.
  *newVar->value = value;
- newVar->name = newInstanceOfString( name );
+ newVar->name = name; newVar->name.refCount = NULL; //newInstanceOfString( name );
  return newVar;
 }
 
@@ -1940,6 +1972,9 @@ struct item  Rubish_main( struct interp *interp, int argc, char **argv ){
 
 #ifndef RUBISH_NOT_STANDALONE
 int main(int argc, char **argv){
+ #if MEMORY_DEBUG
+ START_MEMORY_DEBUG();
+ #endif
  struct interp *interp = makeInterp(NULL);
  struct item result = Rubish_main( interp, argc, argv ); 
  deleteItem( &result );
