@@ -1482,6 +1482,8 @@ struct item  newCopyOfArray( struct interp *interp, struct item a ){
  struct array *aa = a.data.array;
  struct array *bb = malloc( sizeof( struct array ) );
  bb->refCount = 1;
+ bb->chainRefCount = 0;
+ bb->arrayContainsMemoryResources = 0;
  bb->nDims = aa->nDims;
  bb->dims = malloc( sizeof(unsigned int)*aa->nDims);  for(  int i=0;  i < aa->nDims;  i++  ){  bb->dims[i] = aa->dims[i];  }
  bb->size = aa->size;
