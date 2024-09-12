@@ -1,0 +1,10 @@
+start-graphics 640 480;
+while 1 (
+ handle-events
+ for (i 0 100) (
+  colour rnd 256 rnd 256 rnd 256 rnd 256;
+  draw-circle rnd winw rnd winh rnd 100
+ )
+ update-display
+) 
+

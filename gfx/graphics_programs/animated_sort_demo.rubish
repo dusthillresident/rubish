@@ -1,0 +1,72 @@
+
+start-graphics 640 480; handle-events update-display
+
+toggle-vsync 0;
+
+while 1 (
+set a array winw;
+
+for (i 0 winw) (
+ set a[i] int rnd winh
+)
+
+colour 255 128 0;
+
+for (i 0 length a) (
+ colour 0 0 0;
+ draw-line i 0 i winh;
+ colour 255 128 0;
+ draw-line i winh i (- winh a[i])
+)
+
+handle-events update-display
+wait 1000
+
+
+func redraw-index(i)(
+ colour 0 0 0;
+ draw-line i 0 i winh;
+ colour 255 200 100;
+ draw-line i winh i (- winh a[i])
+)
+
+func swap(aa bb)(
+ local c (a[aa]); 
+ set a[aa] a[bb]; set a[bb] c;
+ redraw-index aa;
+ redraw-index bb;
+ handle-events update-display
+ wait 0.4
+)
+
+func partition(a lo hi)(
+ local pivot (a[hi]) i (lo);
+ for (j lo hi) (
+  if <= a[j] pivot (
+   swap i j
+   set i + i 1
+  )
+ )
+ swap i hi;
+ i
+)
+
+func quicksort( a lo hi )(
+ if !(|| >= lo hi < lo 0) (
+  local p (partition a lo hi);
+  quicksort a lo (- p 1)
+  quicksort a (+ p 1) hi 
+ )
+)
+
+quicksort a 0 + -1 length a;
+
+for (i 0 length a) (
+ colour 0 0 0;
+ draw-line i 0 i winh;
+ colour 255 255 0;
+ draw-line i winh i (- winh a[i])
+)
+handle-events update-display
+wait 1000
+)

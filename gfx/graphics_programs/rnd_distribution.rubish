@@ -1,0 +1,19 @@
+
+start-graphics 640 480
+
+set a array 640;
+
+set x 0;
+while (< a[x] 480) (
+ for (i 0 600) (
+  set x int rnd length a;
+  draw-pixel x (- winh (set a[x] + a[x] 1))
+ )
+ handle-events update-display
+)
+
+colour 0xff0000; draw-text 10 200 3 5 "Click mouse to exit"
+while (! mouseb) (
+ handle-events update-display
+ wait 17
+)

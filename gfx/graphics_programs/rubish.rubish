@@ -1,0 +1,15 @@
+set v 0
+set v2 0
+func fnf(n)(- n int n)
+func fnr(x)(
+ set v2 fnf + v2 0.50192837465;
+ set v fnf + v2 * v 4916.196199824025;
+ * x fnf * v 4192.1938235825 fnf * v 6134.5925823582649 fnf * v 7194.148581398513
+)
+print fnr 1;
+start-graphics 1280 1024;
+toggle-vsync 0
+while 1 (
+ handle-events update-display
+ for(i 0 512)(colour fnr 256 fnr 256 fnr 256; draw-pixel fnr winw fnr winh)
+)
