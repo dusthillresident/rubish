@@ -1,1 +1,1 @@
-cc -O2 l.c -o rubish
+cc -O2 rubish.c -o rubish
