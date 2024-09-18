@@ -1,0 +1,74 @@
+
+#  Square root
+func sqr(x)(if x(local y (/ x 4);for(i 0 4)(set y +(* y 0.5)* 0.5 / x y))(0))
+
+#  Sine
+func fnsin(a)(
+ set a * a 0.637;
+ local ia (- int a < a 0);
+ set a - a ia;
+ if (! & ia 1) (set a - 1 a)
+ set a * a a;
+ set a - 1 a;
+ set a + (* a 0.7) * a a 0.3;
+ if (& ia 2)(neg a)(a)
+)
+
+set pi 3.14159265358979323846264338327950288
+
+#  Distance
+func d(x1 y1 x2 y2)(
+ local dx (- x1 x2) dy (- y1 y2);
+ sqr( + (* dx dx) * dy dy )
+)
+
+#  Ansi cursor to position x,y
+func ansiCursor(x y)(
+ (print cat$  chr$ 0x1b "["  str$ int(+ 1 y) ";"  str$ int(+ 1 x) "H")
+)
+
+#  Clear screen and make cursor invisible
+print cat$ chr$ 0x1b "[2J";
+print cat$ chr$ 0x1b "[?25l";
+
+#  The Colours to be reflected by the 'water'
+#set cols (make-array (make-array 255 255 255) (make-array 0 0 255) (make-array 0 0 128) (make-array 96 96 255))
+set cols (make-array
+ (make-array 0 0 64)
+ (make-array 96 96 255)
+ (make-array 0 0 255)
+ (make-array 192 192 255)
+)
+
+#  Clamp within range -1.0 to 1.0
+func lim(n)(if > n 1(1)(if < n -1 (-1)(n)))
+
+#  Blend two colours together
+func blend( c1 c2 r )(local R (- 1 r); make-array (+(* c1[0] r)* c2[0] R) (+(* c1[1] r)* c2[1] R) (+(* c1[2] r)* c2[2] R))
+
+set w 70
+set h 30
+set xy array w h;
+set of 0
+
+while 1 (
+ set of fract + of 0.11;
+ for (y 0 h) (
+  for (x 0 w) (
+   set xy[x y]  fnsin + neg(* of pi 2) * 0.25 d x (* 2 y) (/ w 2) h 
+  )
+ )
+ ansiCursor 0 0
+ set k ""
+ for (y 0 + -1 h) (
+  for (x 0 + -1 w) (
+   set cx  + 0.5 * 0.5 lim * 3 +  xy[x y]  neg xy[(+ 1 x) (+ 1 y)]  neg xy[(+ 1 x) y]      xy[x (+ 1 y)];
+   set cy  + 0.5 * 0.5 lim * 3 +  xy[x y]  neg xy[(+ 1 x) (+ 1 y)]      xy[(+ 1 x) y]  neg xy[x (+ 1 y)];
+   set c blend (blend cols[0] cols[2] cy) (blend cols[1] cols[3] cx) * 0.5 + cx cy;
+   set k cat$ k chr$ 0x1b "[38;2;"str$ int c[0] ";" str$ int c[1] ";" str$ int c[2] "m█"
+  )
+  set k cat$ k chr$ 10
+ )
+ print k; wait 17
+)
+ 
