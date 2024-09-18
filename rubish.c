@@ -56,7 +56,7 @@ struct array { unsigned int refCount, chainRefCount, nDims, *dims; size_t size; 
 struct item NUMBERITEM(double n){ struct item out; out.type=NUMBER; out.data.number=n; return out; }
 struct var { int flags;  struct string name;  struct item *value;  struct var *prev; struct var *next;  unsigned int contextLevel; struct array *parentArray; };
 #define ERROR_MESSAGE_BUFFER_SIZE 64
-struct interp { struct var *vars; char *errorMessage; char errorMessageBuffer[ERROR_MESSAGE_BUFFER_SIZE]; unsigned int contextLevel; double rndSeed; };
+struct interp { struct var *vars; char *errorMessage; char errorMessageBuffer[ERROR_MESSAGE_BUFFER_SIZE]; unsigned int contextLevel; double rndSeed; struct item returnValue; };
 enum varFlag { VARLOCAL = 0b1, VARREF = 0b10, VARREST = 0b100, VARMANAGED = 0b1000 };
 struct func { unsigned int refCount; struct item (*primitive)(struct interp*,char**); struct var *params; char *body; };
 #define isValue(type)  ( !(type) || ( (type)>NOTHING && (type)<ERROR ) )
@@ -102,12 +102,11 @@ struct item  getItem( char **text ){       getitem_start:
   } break;
   default: {
    unsigned int length = 0;  char *start = *text;
-   while( **text && symbolChar(**text) ){  *text += 1;  length++;  }
-   item.type = ( isdigit(*start) || (*start=='-' && isdigit(start[1]) )) ? NUMBER : SYMBOL;
-   if( item.type == NUMBER ){
-    char *dummy; item.data.number = strtod( start, &dummy );
+   while( symbolChar(**text) ){  *text += 1;  length++;  }
+   if(  isdigit(*start) || (*start=='-' && isdigit(start[1]))  ){
+    item.type = NUMBER;  char *dummy;  item.data.number = strtod( start, &dummy );
    }else{
-     item.data.string = (struct string){ NULL, length, start };
+    item.type = SYMBOL;  item.data.string = (struct string){ NULL, length, start };
    }
   }
  }
@@ -306,13 +305,6 @@ struct string newCopyOfString( struct string source ){
  return out;
 }
 
-//struct string newInstanceOfString( struct string source ){
-// struct string out = source;
-// if( source.refCount ){  *source.refCount += 1; /*if( ! *source.refCount ){  printf( "oh no!!! string refCount overflowed!!\n" );  exit(1);  }*/  }
-// return out;
-//}
-
-
 void storeItem( struct item *dest, struct item *item, struct array *parentArray ){
  deleteItemWithParentArray( dest, parentArray );
  if( parentArray ){
@@ -348,7 +340,7 @@ struct var* makeRefVar( struct interp *interp, struct item *target, struct strin
  struct var *newVar = calloc( 1, sizeof(struct var) );  newVar->contextLevel = interp->contextLevel;
  newVar->value = target;
  newVar->flags = VARLOCAL | VARREF;
- newVar->name = name;  newVar->name.refCount = NULL; //newInstanceOfString( name );
+ newVar->name = name;  newVar->name.refCount = NULL;
  if( parentArray ){  newVar->parentArray = parentArray;  parentArray->refCount += 1;  }
  return newVar;
 }
@@ -581,7 +573,7 @@ struct item primitive_Func( struct interp *interp, char **p ){
  struct item result;  result.type = UNDEFINED;
  // ----
  int functionIsNamed = (peekItem(p).type == SYMBOL);  struct item functionNameSymbol;  if( functionIsNamed ) functionNameSymbol = getItem(p);
- if( getItem(p).type != LPAREN ){  interp->errorMessage = "func: syntax error: expecting params list in parens";  return ERRORITEM(*p);  }
+ if( getItem(p).type != LPAREN ){  interp->errorMessage = "func: syntax error: expected params list in parens";  return ERRORITEM(*p);  }
  // process params
  int varIsRestArray = 0;
  while( paramsRemain(p) ){
@@ -650,7 +642,7 @@ struct var*  makeLocalVar( struct interp *interp, struct item value,  struct str
  newVar->value = calloc( 1, sizeof(struct item) );
  // Store the value without incrementing refCount. The 'free floating instance' is converted immediately into the 'stored instance' inside this local var.
  *newVar->value = value;
- newVar->name = name; newVar->name.refCount = NULL; //newInstanceOfString( name );
+ newVar->name = name; newVar->name.refCount = NULL;
  return newVar;
 }
 
@@ -659,13 +651,12 @@ struct item  primitive_Local( struct interp *interp, char **p ){
  struct var *locals = NULL;  struct var *lastLocalCreated = NULL;  struct item failureResult;
  while( paramsRemain(p) ){
   struct item varName = getItem(p);
-  if( varName.type != SYMBOL ){  interp->errorMessage = "local: syntax error: expecting symbol";  failureResult = ERRORITEM(*p);  goto primitive_local_failure;  }
+  if( varName.type != SYMBOL ){  interp->errorMessage = "local: syntax error: expected symbol";  failureResult = ERRORITEM(*p);  goto primitive_local_failure;  }
   struct item value = UNDEFINEDITEM;
   if( peekItem(p).type == LPAREN ){
    value = getValue(interp,p);  if( value.type == ERROR ){  failureResult = value;  goto primitive_local_failure;  }
   }
   ADDVAR( locals, lastLocalCreated, makeLocalVar( interp, value, varName.data.string ) );
-  //deleteItem( &value );
  }
  if( locals ){
   lastLocalCreated->next = interp->vars;  if( interp->vars ) interp->vars->prev = lastLocalCreated;
@@ -675,6 +666,12 @@ struct item  primitive_Local( struct interp *interp, char **p ){
  primitive_local_failure:
  if( locals ) deleteAllVars( NULL, locals );
  return failureResult;
+}
+
+const char *returnExceptionMsg = "! return exception";
+struct item  primitive_Return( struct interp *interp, char **p ){
+ struct item value = getValue(interp,p);  if( value.type == ERROR ) return value;
+ interp->errorMessage = (char*) returnExceptionMsg;  interp->returnValue = value;  return ERRORITEM(*p);
 }
 
 #define VAR_IS_REF(VAR) (VAR->flags & VARREF)
@@ -730,6 +727,8 @@ struct item  callFunc( struct interp *interp, struct func *func, char **p ){
  if( createdNewVars ){
   lastCreatedNewVar->next = interp->vars;  interp->vars = createdNewVars;
  }
+ // Catch return exception
+ if( interp->errorMessage == returnExceptionMsg ){  result = interp->returnValue;  interp->returnValue.type = 0;  interp->errorMessage = "retexp";  }
  return result; 
  callfunc_failure:
  if( result.type != ERROR ){  deleteItem( &result );  result = ERRORITEM(*p);  }
@@ -987,7 +986,6 @@ struct item  primitive_Set( struct interp *interp, char **p ){
  }
  // store the value
  storeItem( itemPtr, &value, parentArray );
- //deleteItem( &value );
  return value;
 }
 
@@ -1102,7 +1100,7 @@ LOGIC_PRIMITIVE( Or, || )
 
 struct item  primitive_Same( struct interp *interp, char **p ){
  struct item  a = getValue(interp,p);  if( a.type == ERROR ) return a;
- if( a.type == NOTHING ){  interp->errorMessage = "same?: expecting two values to compare";  return ERRORITEM(*p);  }
+ if( a.type == NOTHING ){  interp->errorMessage = "same?: expected two values to compare";  return ERRORITEM(*p);  }
  struct item  b = getValue(interp,p);  if( b.type == ERROR ){  deleteItem( &a );  return b;  }
  struct item  result;  result.type = NUMBER;  result.data.number = 0;
  if( a.type == b.type ){
@@ -1115,7 +1113,7 @@ struct item  primitive_Same( struct interp *interp, char **p ){
     result.data.number = ( a.data.string.s == b.data.string.s && a.data.string.length == b.data.string.length );  break;
   }
  }else if( b.type == NOTHING ){
-  interp->errorMessage = "same?: expecting two values to compare";  result = ERRORITEM(*p);
+  interp->errorMessage = "same?: expected two values to compare";  result = ERRORITEM(*p);
  }
  deleteItem( &a );  deleteItem( &b );  return result;
 }
@@ -1178,7 +1176,7 @@ struct item  primitive_While( struct interp *interp, char **p ){
  struct item test = getBoolean(interp,p);  if( test.type == ERROR ) return test;
  char *paren_p = *p;
  if( getItem(p).type != LPAREN ){
-  interp->errorMessage = "while: syntax error: expecting a code block in parens";
+  interp->errorMessage = "while: syntax error: expected a code block in parens";
   return ERRORITEM(*p);
  }
  char *code_p = *p;
@@ -1214,7 +1212,7 @@ struct item  primitive_Foreach( struct interp *interp, char **p ){
  struct item array = getValue( interp, p );  if( array.type == ERROR ) return array;
  switch( array.type ){
   case ARRAY: case UNDEFINED: break;
-  default:  deleteItem(&array);  interp->errorMessage = "foreach: wrong type: expecting an array or undefined item";  return ERRORITEM(*p);
+  default:  deleteItem(&array);  interp->errorMessage = "foreach: wrong type: expected an array or undefined item";  return ERRORITEM(*p);
  }
  char *paren_p = *p;
  if( getItem(p).type != LPAREN ){
@@ -1247,7 +1245,7 @@ struct item  primitive_For( struct interp *interp, char **p ){
  // for ( i 0 10 ) ()
  // for ( i 10 0 -1) ()
  if( getItem(p).type != LPAREN ){
-  interp->errorMessage = "for: syntax error: expecting params list in parens. example: 'for (varName startNumber untilNumber [stepNumber]) ([code])'";
+  interp->errorMessage = "for: syntax error: expected params list in parens. example: 'for (varName startNumber untilNumber [stepNumber]) ([code])'";
   return ERRORITEM(*p);
  }
  struct item varName = getItem(p);
@@ -1265,7 +1263,7 @@ struct item  primitive_For( struct interp *interp, char **p ){
  }
  char *paren_p = *p;
  if( getItem(p).type != LPAREN ){
-  interp->errorMessage = "for: syntax error: expecting code block in parens";  return ERRORITEM(*p);
+  interp->errorMessage = "for: syntax error: expected code block in parens";  return ERRORITEM(*p);
  }
  double until = untilNumber.data.number;  double step = stepNumber.data.number;
  char *code_p = *p;  char *end_p = NULL;  int sign = (step < 0) ^ (until<0)  ;
@@ -1290,7 +1288,7 @@ struct item  primitive_For( struct interp *interp, char **p ){
 
 struct item primitive_Delete( struct interp *interp, char **p ){
  struct item symbol = getItem(p);
- if( symbol.type != SYMBOL ){  interp->errorMessage = "delete: expecting name of variable to delete";  return ERRORITEM(*p);  }
+ if( symbol.type != SYMBOL ){  interp->errorMessage = "delete: expected name of variable to delete";  return ERRORITEM(*p);  }
  struct var *var = lookupVarByName( interp, &symbol.data.string );
  if( !var ) return UNDEFINEDITEM;
  if( var->flags ){
@@ -1460,14 +1458,14 @@ struct item primitive_Array( struct interp *interp, char **p ){
  while( paramsRemain(p) ){
   if( nDims >= 8 ){  interp->errorMessage = "array: too many dimensions";  return ERRORITEM(*p);  }
   struct item dim = getValue(interp,p);
-  if( dim.type != NUMBER ){  deleteItem( &dim );  interp->errorMessage = "array: syntax error: expecting number for dimension";  return ERRORITEM(*p);  }
+  if( dim.type != NUMBER ){  deleteItem( &dim );  interp->errorMessage = "array: syntax error: expected number for dimension";  return ERRORITEM(*p);  }
   if( dim.data.number < 0 || dim.data.number > 4294967296.0 ){
    interp->errorMessage = "array: bad dimension";  return ERRORITEM(*p);
   }
   dims[nDims] = dim.data.number;
   nDims ++;
  }
- if( ! nDims ){  interp->errorMessage = "array: syntax error: can't make an array with no dimensions";  return ERRORITEM(*p);  }
+ if( ! nDims ){  return UNDEFINEDITEM;  /*interp->errorMessage = "array: syntax error: can't make an array with no dimensions";  return ERRORITEM(*p);*/  }
  struct array *array = calloc( 1, sizeof(struct array) );
  array->nDims = nDims;  array->dims = calloc( nDims, sizeof(unsigned int) );  array->refCount = 1;
  size_t arraySize = 0;
@@ -1513,12 +1511,8 @@ struct item  newCopyOfArray( struct interp *interp, struct item a ){
  if( a.type != ARRAY ){ printf( "fuck you\n" ); exit(1); }
  struct array *aa = a.data.array;
  struct array *bb = malloc( sizeof( struct array ) );
- bb->refCount = 1;
- bb->chainRefCount = 0;
- bb->arrayContainsMemoryResources = 0;
- bb->nDims = aa->nDims;
- bb->dims = malloc( sizeof(unsigned int)*aa->nDims);  for(  int i=0;  i < aa->nDims;  i++  ){  bb->dims[i] = aa->dims[i];  }
- bb->size = aa->size;
+ bb->refCount = 1;  bb->chainRefCount = 0;  bb->arrayContainsMemoryResources = 0;  bb->nDims = aa->nDims;  bb->size = aa->size;
+ bb->dims = malloc( sizeof(unsigned int)*aa->nDims );  for(  int i=0;  i < aa->nDims;  i++  ){  bb->dims[i] = aa->dims[i];  }
  bb->itemArray = calloc( bb->size, sizeof(struct item) );
  if( ! bb->itemArray ){
   free( bb->dims );  free( bb );
@@ -1540,7 +1534,7 @@ struct item _primitive_Join_getSingleDimensionalArrayOrUndefinedItem( struct int
     return a;
    }
   default:
-   deleteItem( &a );  interp->errorMessage = "join: expecting 1-dimensional array";  return ERRORITEM(*p);
+   deleteItem( &a );  interp->errorMessage = "join: expected 1-dimensional array";  return ERRORITEM(*p);
  }
 }
 
@@ -1565,9 +1559,23 @@ struct item primitive_Join( struct interp *interp, char **p ){
  a.data.array = cc;  return a;
 }
 
+struct item primitive_Append( struct interp *interp, char **p ){
+ struct item a = _primitive_Join_getSingleDimensionalArrayOrUndefinedItem( interp, p );  if( a.type == ERROR ) return a;
+ struct item b = getValue( interp, p );  if( b.type == ERROR ){  deleteItem( &a );  return b;  }
+ if( a.type == UNDEFINED ){
+  struct item out;  out.type = ARRAY;  out.data.array = makeSimpleArray( &b );  /*deleteItem( &b );*/
+  return out;
+ }else{
+  appendItemToSimpleArray( a.data.array, &b );  /*deleteItem( &b );*/
+  return a;
+ }
+}
+
 struct item  primitive_Dimensions( struct interp *interp, char **p ){
- struct item array = getValue(interp,p);  if( array.type != ARRAY ){  deleteItem(&array);  interp->errorMessage = "dimensions: expecting an array";  return ERRORITEM(*p);  }
- struct item out;  out.type = NUMBER;  out.data.number = array.data.array->nDims;  deleteItem( &array );  return out;
+ struct item out;  out.type = NUMBER;  struct item array = getValue(interp,p);
+ if( array.type == UNDEFINED ){  out.data.number = 0;  return out;  }
+ if( array.type != ARRAY ){  deleteItem( &array );  interp->errorMessage = "dimensions: expected an array";  return ERRORITEM(*p);  }
+ out.data.number = array.data.array->nDims;  deleteItem( &array );  return out;
 }
 
 struct item  primitive_Length( struct interp *interp, char **p ){
@@ -1600,10 +1608,12 @@ struct item  primitive_Catch( struct interp *interp, char **p ){
  // catch ( code block in parens ) [optional value return variable name] ;
  // returns 0 if all okay, returns 1 if an error occurred
  // causes an error if no code block in parens or the parens are not matched
+ char *paren_p = *p;
+ if( getItem(p).type != LPAREN ){  interp->errorMessage = "catch: expected code block in parens";  return ERRORITEM(*p);  }
  char *code_p = *p;
- if( peekItem(p).type != LPAREN ){  interp->errorMessage = "catch: expecting code block in parens";  return ERRORITEM(*p);  }
- if( skipParen(p) ){  interp->errorMessage = "catch: missing ')'";  return ERRORITEM(*p);  }
- struct item result = eval_( interp, code_p, 1 );  int anErrorOccurred = (result.type == ERROR);
+ *p = paren_p;  if( skipParen(p) ){  interp->errorMessage = "catch: missing ')'";  return ERRORITEM(*p);  }
+ struct item result = eval_( interp, code_p, 1 );  if( result.type == ERROR && interp->errorMessage == returnExceptionMsg ){  result = interp->returnValue;  interp->returnValue.type = 0;  interp->errorMessage = "retexp";  }
+ int anErrorOccurred = (result.type == ERROR);
  struct item *returnValuePtr = NULL;  struct array *returnValuePtrParentArray = NULL;
  // optional value return in variable passed by reference
  if( paramsRemain(p) ){
@@ -1623,7 +1633,7 @@ struct item  primitive_Catch( struct interp *interp, char **p ){
 
 struct item  primitive_Eval( struct interp *interp, char **p ){
  struct item str = getValue(interp,p);  if( str.type == ERROR ) return str;
- if( str.type != STRING ){  deleteItem( &str );  interp->errorMessage = "eval: expecting program string";  return ERRORITEM(*p);  }
+ if( str.type != STRING ){  deleteItem( &str );  interp->errorMessage = "eval: expected program string";  return ERRORITEM(*p);  }
  if( ! str.data.string.length ){
   deleteItem( &str );  return UNDEFINEDITEM;
  }
@@ -1687,7 +1697,7 @@ struct item  primitive_Quit( struct interp *interp, char **p ){
 
 struct item primitive_StringInParens( struct interp *interp, char **p ){
  if( peekItem(p).type != LPAREN ){
-  interp->errorMessage = "string-in-parens: expecting parens. The contents of the parens will be returned as a string";  return ERRORITEM(*p);
+  interp->errorMessage = "string-in-parens: expected parens. The contents of the parens will be returned as a string";  return ERRORITEM(*p);
  }
  char *start = *p;  getItem(&start);
  if( skipParen(p) ){
@@ -1740,6 +1750,7 @@ struct interp*  makeInterp( struct interp *interp ){
  installPrimitive( interp, primitive_Dimensions,	"dimensions" );
  installPrimitive( interp, primitive_Error,		"error" );
  installPrimitive( interp, primitive_Catch,		"catch" );
+ installPrimitive( interp, primitive_Return,		"return" );
  installPrimitive( interp, primitive_ErrorMessage,	"error-message" );
  installPrimitive( interp, primitive_Eval,		"eval" );
  installPrimitive( interp, primitive_ItemType,		"item-type" );
@@ -1768,6 +1779,7 @@ struct interp*  makeInterp( struct interp *interp ){
  installPrimitive( interp, primitive_Local,		"local" );
  installPrimitive( interp, primitive_MakeArray,		"make-array" );
  installPrimitive( interp, primitive_Join,		"join" );
+ installPrimitive( interp, primitive_Append,		"append" );
  installPrimitive( interp, primitive_ShiftLeft,		"<<" );
  installPrimitive( interp, primitive_ShiftRight,	">>" );
  installPrimitive( interp, primitive_ShiftShiftRight,	">>>" );
@@ -1796,9 +1808,8 @@ struct interp*  makeInterp( struct interp *interp ){
 }
 
 void deleteInterp( struct interp *interp ){
- while( interp->vars ){
-  deleteVar(interp, interp->vars);
- }
+ if( interp->returnValue.type ) deleteItem( &interp->returnValue );
+ while( interp->vars ){  deleteVar(interp, interp->vars);  }
  free( interp );
 }
 
@@ -1923,6 +1934,7 @@ void printLineColumnInfo( struct interp *interp, char *filename, char *text, cha
 struct item  evalTextFile( struct interp *interp, char *filename, int printInfoOnError ){
  char *text = readTextFile( filename );  if( ! text ){  interp->errorMessage = "couldn't read source file";  return ERRORITEM(NULL);  }
  struct item result = eval( interp, text );
+ if( result.type == ERROR && interp->errorMessage == returnExceptionMsg ){  result = interp->returnValue;  interp->returnValue.type = 0;  interp->errorMessage = "retexp";  }
  if( printInfoOnError && (result.type == ERROR) ){
   // try to find out where the error occured, to print line and column info if possible
   printLineColumnInfo( interp, filename, text, (char*)result.data.ptr );
