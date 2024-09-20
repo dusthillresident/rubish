@@ -1,0 +1,26 @@
+
+start-graphics 640 480
+
+set pal make-array func()(colour 0 0 0) func()(colour 255 0 0) func()(colour 255 255 0) func()(colour 255 255 255);
+
+set g 0.1
+
+func redraw() (
+ for(y 0 winh) (
+  for(x 0 winw) (colour rnd 0x1000000; draw-pixel x y)
+  handle-events update-display; if(|| != w winw != h winh)(return 0)
+ )
+)
+
+toggle-vsync 0
+while ! mouseb (
+ set w winw;
+ set h winh;
+ redraw
+ while (&& = w winw = h winh ! mouseb) (
+  wait 17
+  handle-events
+ )
+)
+
+

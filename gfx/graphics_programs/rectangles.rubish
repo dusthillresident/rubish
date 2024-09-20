@@ -1,0 +1,8 @@
+start-graphics 640 480;
+while 1 (
+ colour rnd 256 rnd 256 rnd 256 rnd 256;
+ draw-rectangle rnd winw rnd winh rnd 150;
+ fill-rectangle rnd winw rnd winh rnd 150;
+ handle-events update-display
+) 
+

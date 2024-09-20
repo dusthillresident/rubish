@@ -1,0 +1,15 @@
+start-graphics 640 480;
+while 1 (
+ colour rnd 256 rnd 256 rnd 256 rnd 256;
+ draw-triangle
+  rnd winw  rnd winh
+  rnd winw  rnd winh
+  rnd winw  rnd winh;
+ fill-triangle
+  rnd winw  rnd winh
+  rnd winw  rnd winh
+  rnd winw  rnd winh;
+ handle-events update-display
+ wait 64
+) 
+
