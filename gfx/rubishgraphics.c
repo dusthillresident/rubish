@@ -80,7 +80,41 @@ struct item primitive_DrawLine( struct interp *interp, char **p ){
  return UNDEFINEDITEM;
 }
 
-struct item primitive_Circle( struct interp *interp, char **p, int filled ){
+
+struct item primitive_Rectangle_( struct interp *interp, char **p, int filled ){
+ struct item item;  int params[4];
+ for(  int i=0;  i < 3;  i++  ){
+  item = getNumber(interp,p);  if( item.type == ERROR ) return item;
+  params[i] = item.data.number;
+  if( i==2 && ! paramsRemain(p) ) params[3] = params[2];
+ }
+ (filled ? fillRectangle : drawRectangle)( params[0], params[1], params[2], params[3] );
+ return UNDEFINEDITEM;
+}
+struct item primitive_DrawRectangle( struct interp *interp, char **p ){
+ return primitive_Rectangle_(interp,p,0);
+}
+struct item primitive_FillRectangle( struct interp *interp, char **p ){
+ return primitive_Rectangle_(interp,p,1);
+}
+
+struct item primitive_Triangle_( struct interp *interp, char **p, int filled ){
+ struct item item;  int params[6];
+ for(  int i=0;  i < 6;  i++  ){
+  item = getNumber(interp,p);  if( item.type == ERROR ) return item;
+  params[i] = item.data.number;
+ }
+ (filled ? fillTriangle : drawTriangle)( params[0], params[1], params[2], params[3], params[4], params[5] );
+ return UNDEFINEDITEM;
+}
+struct item primitive_DrawTriangle( struct interp *interp, char **p ){
+ return primitive_Triangle_(interp,p,0);
+}
+struct item primitive_FillTriangle( struct interp *interp, char **p ){
+ return primitive_Triangle_(interp,p,1);
+}
+
+struct item primitive_Circle_( struct interp *interp, char **p, int filled ){
  struct item item;  int points[3]; 
  for(  int i=0;  i < 3;  i++  ){
   item = getNumber(interp,p);  if( item.type == ERROR ) return item;
@@ -90,10 +124,10 @@ struct item primitive_Circle( struct interp *interp, char **p, int filled ){
  return UNDEFINEDITEM;
 }
 struct item primitive_DrawCircle( struct interp *interp, char **p ){
- return primitive_Circle( interp, p, 0 );
+ return primitive_Circle_( interp, p, 0 );
 } 
 struct item primitive_FillCircle( struct interp *interp, char **p ){
- return primitive_Circle( interp, p, 1 );
+ return primitive_Circle_( interp, p, 1 );
 } 
 
 struct item primitive_DrawText( struct interp *interp, char **p ){
@@ -135,6 +169,10 @@ int main(int argc, char **argv){
  installPrimitive( interp, primitive_DrawLine, "draw-line" );
  installPrimitive( interp, primitive_DrawCircle, "draw-circle" );
  installPrimitive( interp, primitive_FillCircle, "fill-circle" );
+ installPrimitive( interp, primitive_DrawTriangle, "draw-triangle" );
+ installPrimitive( interp, primitive_FillTriangle, "fill-triangle" );
+ installPrimitive( interp, primitive_DrawRectangle, "draw-rectangle" );
+ installPrimitive( interp, primitive_FillRectangle, "fill-rectangle" );
  installPrimitive( interp, primitive_DrawText, "draw-text" );
  installPrimitive( interp, primitive_WinW, "winw" );
  installPrimitive( interp, primitive_WinH, "winh" );

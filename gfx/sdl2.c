@@ -1,16 +1,18 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL2_gfxPrimitives.h>
 #include <stdio.h>
-
+#include <unistd.h>
 
 SDL_Window *myWindow = NULL;
 SDL_Renderer *myRenderer = NULL;
 SDL_Texture *myTexture = NULL;
-int winw=0, winh=0, exposed=0, mySdl2IsRunning=0;
+int winw=0, winh=0, exposed=0, shown=0, mySdl2IsRunning=0;
 int mousex=0, mousey=0, mouseb=0, mousez=0;
 unsigned int currentColour = 0xffffffff; unsigned char currentColourR=255, currentColourG=255, currentColourB=255, currentColourA=255;
 
 #include "font.c"
+
+void handleEvents();
 
 int startSdl2( char **errorMessageReturn, int w, int h){
  if( mySdl2IsRunning ){ 
@@ -43,6 +45,7 @@ int startSdl2( char **errorMessageReturn, int w, int h){
   SDL_DestroyWindow(myWindow);  SDL_DestroyRenderer(myRenderer);  goto startSdl2_failure;
  }
  mySdl2IsRunning = 1;  initFont();
+ while( ! shown ) handleEvents();
  return 0;
  startSdl2_failure:
  if( errorMessageReturn ) *errorMessageReturn = (char*)SDL_GetError();
@@ -137,6 +140,9 @@ void handleEvents(){
     break;
    case SDL_WINDOWEVENT: {
     switch( event.window.event ){
+     case SDL_WINDOWEVENT_SHOWN:
+      shown = 1;
+      break;
      case SDL_WINDOWEVENT_EXPOSED:
       updateDisplay();
       // exposed = 1;
