@@ -1084,59 +1084,6 @@ struct item  primitive_Abs( struct interp *interp, char **p ){
  return a;
 }
 
-int skipItems( char **p ){
- char *last;
- int plevel = 0, blevel = 0;
- while(1){
-  last = *p;  struct item item = getItem(p);
-  switch( item.type ){ 
-   case LBRACKET:  blevel += 1;  break;
-   case RBRACKET:  blevel -= 1;  break;
-   case LPAREN:    plevel += 1;  break;
-   case RPAREN:    plevel -= 1;  break;
-   case NOTHING: return plevel || blevel;
-  }
-  if( plevel < 0 || blevel < 0 ){  *p = last;  return plevel>0 || blevel>0;  }
- }
-}
-
-#define LOGIC_PRIMITIVE( NAME, OPERATION, SKIPWHEN ) \
-struct item  primitive_##NAME( struct interp *interp, char **p ){ \
- struct item  a = getNumber( interp,p );  if( a.type == ERROR ) return a; \
- int result = !!a.data.number; \
- while( paramsRemain(p) ){ \
-  if( result == SKIPWHEN ){ \
-   if( skipItems(p) ){  interp->errorMessage = "##OPERATION##: encountered mismatched parens or brackets when skipping";  return ERRORITEM(*p);  }\
-   break; \
-  } \
-  a = getNumber( interp,p );  if( a.type == ERROR ) return a; \
-  result = result OPERATION !!a.data.number; \
- } \
- a.data.number = result; return a; \
-}
-LOGIC_PRIMITIVE( And, &&, 0 )
-LOGIC_PRIMITIVE( Or, ||, 1 )
-
-struct item  primitive_Same( struct interp *interp, char **p ){
- struct item  a = getValue(interp,p);  if( a.type == ERROR ) return a;
- if( a.type == NOTHING ){  interp->errorMessage = "same?: expected two values to compare";  return ERRORITEM(*p);  }
- struct item  b = getValue(interp,p);  if( b.type == ERROR ){  deleteItem( &a );  return b;  }
- struct item  result;  result.type = NUMBER;  result.data.number = 0;
- if( a.type == b.type ){
-  switch( a.type ){
-   case NUMBER:  case UNDEFINED:  case NOTHING:  
-    return result;
-   case ARRAY:  case FUNCTION:  case FILEPORT:
-    result.data.number = ( a.data.ptr == b.data.ptr );  break;
-   case STRING:
-    result.data.number = ( a.data.string.s == b.data.string.s && a.data.string.length == b.data.string.length );  break;
-  }
- }else if( b.type == NOTHING ){
-  interp->errorMessage = "same?: expected two values to compare";  result = ERRORITEM(*p);
- }
- deleteItem( &a );  deleteItem( &b );  return result;
-}
-
 void  itemToBoolean( struct interp *interp, struct item *test, char **p ){
  switch( test->type ){
   case ERROR:  return;
@@ -1188,6 +1135,59 @@ struct item  primitive_If( struct interp *interp, char **p ){
  }
  // the result will be [UNDEFINED] if the main block was not evaluated, and there was no 'else' block
  return result;
+}
+
+int skipItems( char **p ){
+ char *last;
+ int plevel = 0, blevel = 0;
+ while(1){
+  last = *p;  struct item item = getItem(p);
+  switch( item.type ){ 
+   case LBRACKET:  blevel += 1;  break;
+   case RBRACKET:  blevel -= 1;  break;
+   case LPAREN:    plevel += 1;  break;
+   case RPAREN:    plevel -= 1;  break;
+   case NOTHING: return plevel || blevel;
+  }
+  if( plevel < 0 || blevel < 0 ){  *p = last;  return plevel > 0 || blevel > 0;  }
+ }
+}
+
+#define LOGIC_PRIMITIVE( NAME, OPERATION, SKIPWHEN ) \
+struct item  primitive_##NAME( struct interp *interp, char **p ){ \
+ struct item  a = getBoolean( interp,p );  if( a.type == ERROR ) return a; \
+ int result = !!a.data.number; \
+ while( paramsRemain(p) ){ \
+  if( result == SKIPWHEN ){ \
+   if( skipItems(p) ){  interp->errorMessage = "##OPERATION##: encountered mismatched parens or brackets when skipping";  return ERRORITEM(*p);  }\
+   break; \
+  } \
+  a = getBoolean( interp,p );  if( a.type == ERROR ) return a; \
+  result = result OPERATION !!a.data.number; \
+ } \
+ a.data.number = result; return a; \
+}
+LOGIC_PRIMITIVE( And, &&, 0 )
+LOGIC_PRIMITIVE( Or, ||, 1 )
+
+struct item  primitive_Same( struct interp *interp, char **p ){
+ struct item  a = getValue(interp,p);  if( a.type == ERROR ) return a;
+ if( a.type == NOTHING ){  interp->errorMessage = "same?: expected two values to compare";  return ERRORITEM(*p);  }
+ struct item  b = getValue(interp,p);  if( b.type == ERROR ){  deleteItem( &a );  return b;  }
+ struct item  result;  result.type = NUMBER;  result.data.number = 0;
+ if( a.type == b.type ){
+  switch( a.type ){
+   case NUMBER:  case UNDEFINED:  case NOTHING:  
+    return result;
+   case ARRAY:  case FUNCTION:  case FILEPORT:
+    result.data.number = ( a.data.ptr == b.data.ptr );  break;
+   case STRING:
+    result.data.number = ( a.data.string.s == b.data.string.s && a.data.string.length == b.data.string.length );  break;
+  }
+ }else if( b.type == NOTHING ){
+  interp->errorMessage = "same?: expected two values to compare";  result = ERRORITEM(*p);
+ }
+ deleteItem( &a );  deleteItem( &b );  return result;
 }
 
 struct item  primitive_While( struct interp *interp, char **p ){
