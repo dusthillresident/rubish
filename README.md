@@ -1,7 +1,5 @@
 # rubish
-
-"The ultimate rubbish programming language"
-
+*"The ultimate rubbish programming language"*\
 A simple programming language with interpreter written in C
 
 The design goal and intention behind Rubish is simplicity, aiming to be extremely simple (both in terms of language syntax and implementation complexity) while still being flexible and powerful. 
