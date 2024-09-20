@@ -16,6 +16,7 @@ Core features of Rubish:
   - Array
 - Basic numerical calculation functions
 - String handling, and basic string manipulation functions
+- You can use strings as byte arrays
 - Console i/o
 - File i/o
 - Error/exception trapping and handling
