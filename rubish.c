@@ -1084,19 +1084,38 @@ struct item  primitive_Abs( struct interp *interp, char **p ){
  return a;
 }
 
-#define LOGIC_PRIMITIVE( NAME, OPERATION ) \
+int skipItems( char **p ){
+ char *last;
+ int plevel = 0, blevel = 0;
+ while(1){
+  last = *p;  struct item item = getItem(p);
+  switch( item.type ){ 
+   case LBRACKET:  blevel += 1;  break;
+   case RBRACKET:  blevel -= 1;  break;
+   case LPAREN:    plevel += 1;  break;
+   case RPAREN:    plevel -= 1;  break;
+   case NOTHING: return plevel || blevel;
+  }
+  if( plevel < 0 || blevel < 0 ){  *p = last;  return plevel>0 || blevel>0;  }
+ }
+}
+
+#define LOGIC_PRIMITIVE( NAME, OPERATION, SKIPWHEN ) \
 struct item  primitive_##NAME( struct interp *interp, char **p ){ \
  struct item  a = getNumber( interp,p );  if( a.type == ERROR ) return a; \
- struct item  b = getNumber( interp,p );  if( b.type == ERROR ) return b; \
- int result = !!a.data.number OPERATION !!b.data.number; \
+ int result = !!a.data.number; \
  while( paramsRemain(p) ){ \
-  struct item  a = getNumber( interp,p );  if( a.type == ERROR ) return a; \
+  if( result == SKIPWHEN ){ \
+   if( skipItems(p) ){  interp->errorMessage = "##OPERATION##: encountered mismatched parens or brackets when skipping";  return ERRORITEM(*p);  }\
+   break; \
+  } \
+  a = getNumber( interp,p );  if( a.type == ERROR ) return a; \
   result = result OPERATION !!a.data.number; \
  } \
  a.data.number = result; return a; \
 }
-LOGIC_PRIMITIVE( And, && )
-LOGIC_PRIMITIVE( Or, || )
+LOGIC_PRIMITIVE( And, &&, 0 )
+LOGIC_PRIMITIVE( Or, ||, 1 )
 
 struct item  primitive_Same( struct interp *interp, char **p ){
  struct item  a = getValue(interp,p);  if( a.type == ERROR ) return a;
