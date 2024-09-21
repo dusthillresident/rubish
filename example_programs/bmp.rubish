@@ -1,0 +1,81 @@
+# Example: using strings as byte-arrays with 'byte-get' and 'byte-set'
+# This program generates a windows .bmp image and writes it out to a file
+
+func int-to-binary-string (n) (
+ local out;
+ for(i 0 4) (
+  set out cat$ out chr$ & n 0xff;
+  set n >> n 8;
+ )
+ out
+)
+func make-bmp (w h) (
+ set w int w; set h int h;
+ local out size(+ (* h % w 4) * 3 w h);
+ set out cat$
+  "BM"
+  (int-to-binary-string (+ 2 4 2 2 4 40 size))
+  (int-to-binary-string 0)
+  (int-to-binary-string (+ 2 4 2 2 4 40))
+  (int-to-binary-string 40)
+  (int-to-binary-string w)
+  (int-to-binary-string h)
+  chr$ 1  chr$ 0
+  chr$ 24 chr$ 0
+  (int-to-binary-string 0)
+  (int-to-binary-string size)
+  (int-to-binary-string 0x0ec4)
+  (int-to-binary-string 0x0ec4)
+  (int-to-binary-string 0)
+  (int-to-binary-string 0)
+  (string$ size (chr$ 0))
+ ;
+)
+func int-from-binary-string (string index) (
+ local out;
+ for (i 0 4) (
+  set out | out << (byte-get string + index i) * 8 i
+ )
+)
+func bmp-width (bmp) (
+ int-from-binary-string bmp + 2 * 4 4
+)
+func bmp-height (bmp) (
+ int-from-binary-string bmp + 2 * 4 5
+)
+func bmp-draw-pixel (bmp x y colour) (
+ if(|| < x 0 < y 0) (return 0)
+ local w (bmp-width bmp) h (bmp-height bmp);
+ if(|| >= x w >= y h) (return 0)
+ local i (+ (int-from-binary-string bmp 10) (* int y (+ (% w 4) * w 3)) (* 3 int x));
+ byte-set bmp i colour;
+ byte-set bmp(+ i 1) >> colour 8;
+ byte-set bmp(+ i 2) >> colour 16;
+)
+func bmp-draw-line (bmp x1 y1 x2 y2 colour) (
+ set x1 int x1  set y1 int y1  set x2 int x2  set y2 int y2
+ local w (bmp-width bmp) h (bmp-height bmp) d (| (abs - x1 x2) abs - y1 y2) x y xd (- x2 x1) yd (- y2 y1) j of (int-from-binary-string bmp 10);
+ for(i 0 1.0 (/ 1 d)) (
+  set x + x1 * xd i;
+  set y + y1 * yd i;
+  if (&& >= x 0 >= y 0 < x w < y h) (
+   set j + of (* int y + % w 4 * w 3) * 3 int x;
+   byte-set bmp j colour;
+   byte-set bmp(+ j 1) >> colour 8;
+   byte-set bmp(+ j 2) >> colour 16;
+  )
+ )
+)
+
+
+set w 640
+set h 480
+set bmp make-bmp w h;
+for (i 0 325) (
+ bmp-draw-pixel bmp rnd w rnd h rnd 0x1000000;
+ bmp-draw-line bmp rnd w rnd h rnd w rnd h rnd 0x1000000;
+)
+bmp-draw-line bmp 0 0 w h 0xff0000
+bmp-draw-line bmp 0 h w 0 0xff0000
+
+file-write (openout "test_random_picture.bmp") bmp;
