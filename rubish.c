@@ -896,12 +896,12 @@ struct item primitive_FileWrite( struct interp *interp, char **p ){
  struct item fileportItem = getValue(interp,p);  if( ! checkFileIsAppropriate( interp, p, &fileportItem, FPWRITE ) ) return fileportItem;
  FILE *fp = fileportItem.data.fileport->fp;
  // get the string to write
- struct item string = getString( interp, p );  if( string.type == ERROR ){  deleteItem( &string );  return string;  }
+ struct item string = getString( interp, p );  if( string.type == ERROR ){  deleteItem( &fileportItem );  return string;  }
  // write string
  struct item result;  result.type = NUMBER;
  result.data.number = fwrite( string.data.string.s, 1, string.data.string.length, fp );
  // return
- deleteItem( &fileportItem );  return result;
+ deleteItem( &string );  deleteItem( &fileportItem );  return result;
 }
 
 struct item  primitive_FileSeek_( struct interp *interp, char **p, int whence ){
@@ -1371,11 +1371,12 @@ struct item  primitive_ByteSet( struct interp *interp, char **p ){
  struct item  index = getNumber( interp, p );  if( index.type == ERROR ){  result = index;  goto ByteSet_exit;  }
  struct item  value = getNumber( interp, p );  if( value.type == ERROR ){  result = value;  goto ByteSet_exit;  }
  long long int indexV = index.data.number;
- if( indexV < 0 || indexV >= s.data.string.length ){  interp->errorMessage = "byte-set: index out of range";  result = ERRORITEM(*p);  }
- result.data.number = ( *(unsigned char*)(s.data.string.s + indexV) = value.data.number ); 
- ByteSet_exit:
- deleteItem( &s );
- return result;
+ if( indexV < 0 || indexV >= s.data.string.length ){
+  fprintf( stderr, "index is %lld (%f), length is %u\n", indexV, index.data.number, s.data.string.length);  interp->errorMessage = "byte-set: index out of range";  result = ERRORITEM(*p);
+ }else{
+  result.data.number = ( *(unsigned char*)(s.data.string.s + indexV) = value.data.number ); 
+ }
+ ByteSet_exit:  deleteItem( &s );  return result;
 }
 
 struct item  primitive_ByteGet( struct interp *interp, char **p ){
@@ -1388,8 +1389,7 @@ struct item  primitive_ByteGet( struct interp *interp, char **p ){
  }else{
   result.data.number = *(unsigned char*)( s.data.string.s + indexV );
  }
- deleteItem( &s );
- return result;
+ deleteItem( &s );  return result;
 }
 
 struct item  primitive_StringS( struct interp *interp, char **p ){
