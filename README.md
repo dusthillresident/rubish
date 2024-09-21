@@ -61,19 +61,19 @@ for( x 0 10 ) (
  )
 )
 # Then we can access contents in the array like this
-print matrix[4 6];
+print "Reading a value from our 2D array:" matrix[4 6];
 set x-offset 3;
 set y-offset 2;
-print matrix[(+ 1 x-offset) (+ 3 y-offset)];
+print "Reading another value from our 2D array:"  matrix[(+ 1 x-offset) (+ 3 y-offset)];
 # This creates a 1D array with four items in it
 set list  make-array "one" "two"  3  4.4;
 # We can iterate over the array like this
 foreach item list (
- print item;
+ print "An item from our 1D array:" item;
 )
 # Or like this
 for (i 0 (length list)) (
- print list[i];
+ print (cat$ "Item number #" str$ i " of our 1D array:") list[i];
 )
 
 
@@ -130,4 +130,52 @@ set f 0;
 # Example: execute Rubish code from an external file
 set return-value source "our_test_text_file.txt";
 print "return-value is " return-value;
+
+
+# Example: using strings as byte-arrays, demonstrated by building a windows .BMP image and writing it out to a file
+print "Generating a bitmap file as a demonstration of the use of strings as byte-arrays, this may take a second";
+func int-to-binary-string (n) (
+ local out;
+ for(i 0 4) (
+  set out cat$ out chr$ & n 0xff;
+  set n >> n 8;
+ )
+ out
+)
+func make-bmp (w h) (
+ set w int w; set h int h;
+ local out size(+ (* h % w 4) * 3 w h);
+ set out cat$
+  "BM"
+  (int-to-binary-string (+ 2 4 2 2 4 40 size))
+  (int-to-binary-string 0)
+  (int-to-binary-string (+ 2 4 2 2 4 40))
+  (int-to-binary-string 40)
+  (int-to-binary-string w)
+  (int-to-binary-string h)
+  chr$ 1  chr$ 0
+  chr$ 24 chr$ 0
+  (int-to-binary-string 0)
+  (int-to-binary-string size)
+  (int-to-binary-string 0x0ec4)
+  (int-to-binary-string 0x0ec4)
+  (int-to-binary-string 0)
+  (int-to-binary-string 0)
+  (string$ size (chr$ 0))
+ ;
+)
+func int-from-binary-string (string index) (
+ local out;
+ for (i 0 4) (
+  set out | out (<< (byte-get string (+ index i)) (* 8 i))
+ )
+)
+# Fill bitmap image with random pixels
+set bmp make-bmp 300 300;
+set l length bmp;
+for(i 54 l) (
+ byte-set bmp i neg < (/ i l) rnd
+)
+file-write (openout "demo_bitmap_file.bmp") bmp;
+print "Done";
 ```
