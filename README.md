@@ -25,6 +25,7 @@ Core features of Rubish:
 - Completely automatic memory management
 
 # Brief introduction to 'Rubish' through example programs
+The following code can also be found in example_programs/learnrubish.rubish
 ```
 # Example: print text to the console
 print "Hello";
