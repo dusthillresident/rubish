@@ -22,6 +22,7 @@ Core features of Rubish:
 - Error/exception trapping and handling
 - Arrays, which can have up to 8 dimensions. Single dimensional arrays can be used a bit like 'lists' from contemporary programming languages, and because of the dynamic typing, you can use arrays to construct linked lists
 - Functions, to which you can pass parameters by value or variables by reference, and which can take a variable number of arguments, and which can have local variables, and which don't necessarily need to be named (lambda functions)
+- Completely automatic memory management
 
 # Brief introduction to 'Rubish' through example programs
 ```
