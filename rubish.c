@@ -1749,7 +1749,7 @@ struct interp*  makeInterp( struct interp *interp ){
  installPrimitive( interp, primitive_StringS,		"string$" );
  installManagedFileport( interp, stderr, FPWRITE,	"stderr" );
  installManagedFileport( interp, stdin,  FPREAD,	"stdin" );
- installManagedFileport( interp, stderr, FPWRITE,	"stdout" );
+ installManagedFileport( interp, stdout, FPWRITE,	"stdout" );
  installPrimitive( interp, primitive_Openin,		"openin" );
  installPrimitive( interp, primitive_Openout,		"openout" );
  installPrimitive( interp, primitive_Openup,		"openup" );
@@ -1762,6 +1762,7 @@ struct interp*  makeInterp( struct interp *interp ){
  installPrimitive( interp, primitive_FileSeekTo,	"file-seek-to" );
  installPrimitive( interp, primitive_FileSeekFrom,	"file-seek-from-cur" );
  installPrimitive( interp, primitive_FileSeekFromEnd,	"file-seek-from-end" );
+ installPrimitive( interp, primitive_FilePutChar,	"put-char" );
  installPrimitive( interp, primitive_FileGetLine,	"get-line" );
  installPrimitive( interp, primitive_FileGetByte,	"get-byte" );
  installPrimitive( interp, primitive_FileGetChar,	"get-char" );
