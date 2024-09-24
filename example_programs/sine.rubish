@@ -39,7 +39,7 @@ func plot(x y)(
  )
 )
 
-set message "Thank you for trying Rubish "
+set message "Here's more stupid bullshit nobody cares about. i can write whatever here and nobody will ever see it. Suck my balls.  "
 
 set offset 0.0
 
@@ -54,7 +54,7 @@ while 1 (
  for (x 0 ww) (
   set y + (/ hh 2) * 0.8 (/ hh 2) fnsin( + (* offset pi 2) * pi 2 / x ww );
   plot x y
-  if (& 1 x) (ansiCursor (/ x 2) (+ -1.5 / y 2); print (range$ message % (+ (* offset length message) >> x 1) (length message)))
+  if (& 1 x) (ansiCursor (+ 1 / x 2) (+ -1.5 / y 2); print (range$ message % (+ (* offset length message) >> x 1) (length message)))
  )
 
  print ;
