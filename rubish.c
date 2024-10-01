@@ -1127,7 +1127,7 @@ struct item  primitive_##NAME( struct interp *interp, char **p ){ \
  int result = !!a.data.number; \
  while( paramsRemain(p) ){ \
   if( result == SKIPWHEN ){ \
-   if( skipItems(p) ){  interp->errorMessage = "##OPERATION##: encountered mismatched parens or brackets when skipping";  return ERRORITEM(*p);  }\
+   if( skipItems(p) ){  interp->errorMessage = #OPERATION ": encountered mismatched parens or brackets when skipping";  return ERRORITEM(*p);  }\
    break; \
   } \
   a = getBoolean( interp,p );  if( a.type == ERROR ) return a; \
@@ -1914,7 +1914,7 @@ void printLineColumnInfo( struct interp *interp, char *filename, char *text, cha
  while( var ){
   if( var->value->type == FUNCTION && ! var->value->data.func->primitive ){
    struct func *func = var->value->data.func;  if( p < func->body ){  var = var->next;  continue;  }
-   unsigned int length = strlen( func->body );  if( ! (  p >= func->body  &&  p <= func->body + length  ) ) continue;
+   unsigned int length = strlen( func->body );  if( ! (  p >= func->body  &&  p <= func->body + length  ) ){  var = var->next;  continue;  }
    fprintf( stderr, "In function '" );  printString( stderr, &var->name );  fprintf( stderr, "'\n" );
    findLineColumn( func->body, p );
    return;
