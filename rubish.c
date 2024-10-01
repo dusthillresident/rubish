@@ -7,39 +7,7 @@
 //#include <fcntl.h>
 #include <poll.h>
 
-// memory problem debugging stuff
-#define MEMORY_DEBUG 0
-#if MEMORY_DEBUG
- FILE *MEMORY_DEBUG_OUT = NULL;
- void START_MEMORY_DEBUG(){
-  MEMORY_DEBUG_OUT = fopen("MEMORY_DEBUG_OUT.TXT","wb");
- }
- void* mymallocfordebug(size_t size    ,int n, char *f,char *fun){
-  void *out = malloc(size);
-  fprintf(MEMORY_DEBUG_OUT, "line %d,	%s,	%s,	MALLOC	%p\n",n,f,fun,out);  fflush( MEMORY_DEBUG_OUT );
-  return out;
- }
- void* mycallocfordebug(size_t nmemb, size_t size    ,int n, char *f,char *fun){
-  void *out = calloc(nmemb,size);
-  fprintf(MEMORY_DEBUG_OUT, "line %d,	%s,	%s,	CALLOC	%p\n",n,f,fun,out);  fflush( MEMORY_DEBUG_OUT );
-  return out;
- }
- void* myreallocfordebug(void *ptr, size_t size    ,int n, char *f,char *fun,char *name){
-  void *out = realloc(ptr,size);
-  fprintf(MEMORY_DEBUG_OUT, "line %d,	%s,	%s,	REALLOC	%p ( input %p )	'%s'\n",n,f,fun,out,ptr,name);  fflush( MEMORY_DEBUG_OUT );
-  return out;
- }
- void myfreefordebug(void *ptr,      int n, char *f,char *fun,char *name){
-  fprintf(MEMORY_DEBUG_OUT, "line %d,	%s,	%s,	FREEING	%p	'%s'\n",n,f,fun,ptr,name);  fflush( MEMORY_DEBUG_OUT );
-  free(ptr);
- }
- #define malloc(a) mymallocfordebug(a,__LINE__,__FILE__,(char*)__FUNCTION__)
- #define calloc(a,b) mycallocfordebug(a,b,__LINE__,__FILE__,(char*)__FUNCTION__)
- #define realloc(a,b) myreallocfordebug(a,b,__LINE__,__FILE__,(char*)__FUNCTION__,#a)
- #define free(p) myfreefordebug(p,__LINE__,__FILE__,(char*)__FUNCTION__,#p)
-#endif
-
-#define MAIN_PRINT_RESULT 1
+#define MAIN_PRINT_RESULT 0
 
 struct string; struct item; struct var; struct interp; struct func; struct array;
 // if refCount is not NULL, that means it is a heap string and requires free() management
@@ -125,8 +93,8 @@ void deleteString( struct string s ){
  }
 }
 
-// The following functions implement the functionality of 'checkAndDeleteIfArrayIsOrphanedChain', which called by 'deleteItem' for arrays that contain arrays.
-// Rubish allows you to store arrays within arrays, and build linked chains of arrays. In this scenario, extra checking of references is necessary to ensure that memory resources aren't leaked.
+// the following functions implement the functionality of 'checkAndDeleteIfArrayIsOrphanedChain', which called by 'deleteItem' for arrays that contain arrays,
+// rubish allows you to store arrays within arrays, and build linked chains of arrays, and in this scenario extra checking of references is necessary to ensure that memory resources aren't leaked
 
 #define CH_DEFAULT_SIZE 48
 struct CHitem { void *ptr; unsigned int count; int supported; int containsThis; };  struct checkHistory { size_t size, n; struct CHitem *ptrs; };
@@ -1440,7 +1408,11 @@ struct item primitive_RangeS( struct interp *interp, char **p ){
 struct item primitive_EqualS( struct interp *interp, char **p ){
  struct item a = getString(interp,p);  if( a.type == ERROR ) return a;
  struct item b = getString(interp,p);  if( b.type == ERROR ){  deleteItem(&a);  return b;  }
- struct item out;  out.type = NUMBER;  out.data.number = stringsMatch( &a.data.string, &b.data.string );
+ struct item out;  out.type = NUMBER;
+ if( !a.data.string.length || !b.data.string.length )
+  out.data.number = ( a.data.string.length == b.data.string.length );
+ else
+  out.data.number = stringsMatch( &a.data.string, &b.data.string );
  deleteItem( &a );  deleteItem( &b );
  return out;
 }
@@ -1987,12 +1959,13 @@ struct item  Rubish_main( struct interp *interp, int argc, char **argv ){
    }
   }
  }
- #if MAIN_PRINT_RESULT
  // print result
  if( result.type == ERROR ){
   fprintf( stderr, "-- Error result --\n" );
   fprintf( stderr, "Error message: %s\n", interp->errorMessage );
- }else{
+ }
+ #if MAIN_PRINT_RESULT
+ else{
   fprintf( stderr, "-- Good result --\n");
   fprintf( stderr, "Result:\n");
   printItem( stderr, result );
@@ -2004,9 +1977,6 @@ struct item  Rubish_main( struct interp *interp, int argc, char **argv ){
 
 #ifndef RUBISH_NOT_STANDALONE
 int main(int argc, char **argv){
- #if MEMORY_DEBUG
- START_MEMORY_DEBUG();
- #endif
  struct interp *interp = makeInterp(NULL);
  struct item result = Rubish_main( interp, argc, argv ); 
  deleteItem( &result );
