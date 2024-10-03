@@ -347,7 +347,6 @@ struct item  getValue( struct interp *interp, char **p ){
   case SYMBOL: {
    int infoReturn = 0;  struct item *itemPtr = lookupItemPtr( interp, p, &item, &infoReturn, NULL );  if( infoReturn ) return item;
    if( ! itemPtr ){  fprintf(stderr, "symbol is: ");  printString(stderr,&item.data.string);  putchar(10);  interp->errorMessage = "unknown symbol";  return ERRORITEM(*p);  }
-
    if( ref || itemPtr->type != FUNCTION ){
     storeItem( &item, itemPtr, NULL ); // increment ref count for the free-floating instance of the item
     if( item.type == ARRAY ) goto getValue_start;
