@@ -1942,12 +1942,23 @@ struct item  primitive_Source( struct interp *interp, char **p ){
  return result;
 }
 
+#ifdef INCLUDE_PROMPT
+void Rubish_prompt( struct interp *interp ){
+ #include "prompt.c"
+ printf( "Rubish prompt\n" );
+ eval( interp, (char*) prompt_rubish );
+}
+#endif
+
 struct item  Rubish_main( struct interp *interp, int argc, char **argv ){
  installStringArray( interp, argc-2, argv+2, "command-line" );
  struct item result;
  // get and run program
  if( argc == 1 ){
-  fprintf( stderr, "Usage: %s [program text or path to program text file]\n", argv[0] );
+  fprintf( stderr, "Rubish interpreter\nhttps://github.com/dusthillresident/Rubish\nUsage: %s [program text or path to program text file] ([arguments to program])\n", argv[0] );
+  #ifdef INCLUDE_PROMPT
+  Rubish_prompt( interp );
+  #endif
   return UNDEFINEDITEM;
  }else if( argc >= 2 ){
   if( fileExists(argv[1]) ){
