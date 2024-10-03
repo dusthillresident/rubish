@@ -15,7 +15,7 @@ func £.get()(
   £.if £.< c 0 (£.print; £.quit)
   £.if £.= c 34 (£.set q £.! q)
   £.if £.! q (
-   £.if (&& £.= c 10 £.! l) (£.set r 0)
+   £.if (&& £.= c 10 £.< l 1) (£.set r 0)
    £.set l £.+ l £.p[c]
   )
   £.set s £.cat$ s £.chr$ c;
