@@ -483,7 +483,7 @@ void printItem( FILE *port, struct item item ){
   case LBRACKET:	fprintf( port, "'['" ); break;
   case RBRACKET:	fprintf( port, "']'" ); break;
   case STOP:		fprintf( port, "[;]" ); break;
-  case FUNCTION:	fprintf( port, "[FUNCTION]" ); break;
+  case FUNCTION:	fprintf( port, "[%s %p]", item.data.func->primitive ? "PRIMITIVE" : "FUNCTION", item.data.func ); break;
   case ARRAY:		fprintf( port, "[ARRAY]" ); break;
   case ERROR:		fprintf( port, "[ERROR]" ); break;
   case FILEPORT:	fprintf( port, "[FILEPORT]" ); break;
@@ -1956,7 +1956,7 @@ struct item  Rubish_main( struct interp *interp, int argc, char **argv ){
  if( argc == 1 ){
   fprintf( stderr, "Rubish interpreter\nhttps://github.com/dusthillresident/Rubish\nUsage: %s [program text or path to program text file] ([arguments to program])\n", argv[0] );
   #ifdef INCLUDE_PROMPT
-  Rubish_prompt( interp );
+  if( isatty(STDIN_FILENO) ) Rubish_prompt( interp );
   #endif
   return UNDEFINEDITEM;
  }else if( argc >= 2 ){
