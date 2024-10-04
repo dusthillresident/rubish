@@ -73,11 +73,11 @@ struct item  getItem( char **text ){       getitem_start:
    item.type = STRING;  item.data.string = (struct string){ NULL, length, start };
   } break;
   default: {
-   unsigned int length = 0;  char *start = *text;
-   while( symbolChar(**text) ){  *text += 1;  length++;  }
+   char *start = *text;
    if(  isdigit(*start) || (*start=='-' && isdigit(start[1]))  ){
-    item.type = NUMBER;  char *dummy;  item.data.number = strtod( start, &dummy );
+    item.type = NUMBER;  char *dummy;  item.data.number = strtod( start, &dummy );  *text = dummy;
    }else{
+    unsigned int length = 0;  while( symbolChar(**text) ){  *text += 1;  length++;  }
     item.type = SYMBOL;  item.data.string = (struct string){ NULL, length, start };
    }
   }
