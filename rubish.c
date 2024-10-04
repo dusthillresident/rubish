@@ -4,8 +4,12 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <errno.h>
+#ifndef WIN32
 #include <poll.h>
+#include <sys/resource.h>
+#endif
 
+#define DEFAULT_CALL_LIMIT 2048
 #define MAIN_PRINT_RESULT 0
 
 struct string; struct item; struct var; struct interp; struct func; struct array;
@@ -24,7 +28,7 @@ struct array { unsigned int refCount, chainRefCount, nDims, *dims; size_t size; 
 struct item NUMBERITEM(double n){ struct item out; out.type=NUMBER; out.data.number=n; return out; }
 struct var { int flags;  struct string name;  struct item *value;  struct var *prev; struct var *next;  unsigned int contextLevel; struct array *parentArray; };
 #define ERROR_MESSAGE_BUFFER_SIZE 64
-struct interp { struct var *vars; char *errorMessage; char errorMessageBuffer[ERROR_MESSAGE_BUFFER_SIZE]; unsigned int contextLevel; double rndSeed; struct item returnValue; };
+struct interp { struct var *vars; char *errorMessage; char errorMessageBuffer[ERROR_MESSAGE_BUFFER_SIZE]; unsigned int contextLevel, levelLimit; double rndSeed; struct item returnValue; };
 enum varFlag { VARLOCAL = 0b1, VARREF = 0b10, VARREST = 0b100, VARMANAGED = 0b1000 };
 struct func { unsigned int refCount; struct item (*primitive)(struct interp*,char**); struct var *params; char *body; };
 #define isValue(type)  ( !(type) || ( (type)>NOTHING && (type)<ERROR ) )
@@ -651,6 +655,7 @@ struct item  primitive_Return( struct interp *interp, char **p ){
 #define VAR_IS_REST(VAR) (VAR->flags & VARREST)
 
 struct item  callFunc( struct interp *interp, struct func *func, char **p ){
+ if( interp->contextLevel >= interp->levelLimit ){  interp->errorMessage = "function call: exceeded recursion limit";  return ERRORITEM(*p);  }
  struct var *previousTopVar = interp->vars;
  interp->contextLevel += 1;  unsigned int thisContextLevel = interp->contextLevel;
  struct item result = UNDEFINEDITEM;
@@ -851,6 +856,7 @@ struct item primitive_FileRead( struct interp *interp, char **p ){
  deleteItem( &fileportItem );  return result;
 }
 
+#ifndef WIN32
 struct item primitive_InputReady( struct interp *interp, char **p ){
  struct item fileportItem = getValue(interp,p);  if( ! checkFileIsAppropriate( interp, p, &fileportItem, FPREAD ) ) return fileportItem;
  struct item result;
@@ -863,6 +869,7 @@ struct item primitive_InputReady( struct interp *interp, char **p ){
  }
  return result;
 }
+#endif
 
 struct item primitive_FileWrite( struct interp *interp, char **p ){
  // get the fileport to read from
@@ -1713,7 +1720,13 @@ struct interp*  makeInterp( struct interp *interp ){
  if( ! interp ) interp = calloc( 1, sizeof( struct interp ) );
  interp->errorMessage = "(C)2024 Rubish";
  interp->rndSeed = newRndSeed();
+ #ifndef WIN32
+ struct rlimit limit;  getrlimit (RLIMIT_STACK, &limit);  interp->levelLimit = limit.rlim_cur / 1024;
+//printf("blaahhhhh %u\n",interp->levelLimit);
  installPrimitive( interp, primitive_InputReady,	"input-ready?");
+ #else
+ interp->levelLimit = DEFAULT_CALL_LIMIT;
+ #endif
  installPrimitive( interp, primitive_System,		"system");
  installPrimitive( interp, primitive_Same,		"same?");
  installPrimitive( interp, primitive_NewRndSeed, 	"get-new-rnd-seed" );
