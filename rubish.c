@@ -1722,7 +1722,6 @@ struct interp*  makeInterp( struct interp *interp ){
  interp->rndSeed = newRndSeed();
  #ifndef WIN32
  struct rlimit limit;  getrlimit (RLIMIT_STACK, &limit);  interp->levelLimit = limit.rlim_cur / 1024;
-//printf("blaahhhhh %u\n",interp->levelLimit);
  installPrimitive( interp, primitive_InputReady,	"input-ready?");
  #else
  interp->levelLimit = DEFAULT_CALL_LIMIT;
