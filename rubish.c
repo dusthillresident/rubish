@@ -1837,6 +1837,7 @@ struct item  eval_p( struct interp *interp, char **p, int inParens ){
      if( ! inParens ){  deleteItem( &value );  interp->errorMessage = "extraneous/unmatched ')'";  return ERRORITEM(*p);  }
      return value;
     case NOTHING: case 0:
+     if( inParens ){  deleteItem( &value );  interp->errorMessage = "missing ')'";  return ERRORITEM(*p);  }
      return value;
     case STOP:
      break;
