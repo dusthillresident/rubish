@@ -25,7 +25,7 @@ struct array { unsigned int refCount, chainRefCount, nDims, *dims; size_t size; 
 #define NOTHINGITEM	((struct item){NOTHING, {.integer=0}})
 #define NOTHINGITEMOFTYPE(N)	((struct item){NOTHING, {.integer=N}})
 #define UNDEFINEDITEM 	((struct item){UNDEFINED, {NULL}})
-struct item NUMBERITEM(double n){ struct item out; out.type=NUMBER; out.data.number=n; return out; }
+#define NUMBERITEM(N)	((struct item){NUMBER, {.number=(N)}})
 struct var { int flags;  struct string name;  struct item *value;  struct var *prev; struct var *next;  unsigned int contextLevel; struct array *parentArray; };
 #define ERROR_MESSAGE_BUFFER_SIZE 64
 struct interp { struct var *vars; char *errorMessage; char errorMessageBuffer[ERROR_MESSAGE_BUFFER_SIZE]; unsigned int contextLevel, levelLimit; double rndSeed; struct item returnValue; };
