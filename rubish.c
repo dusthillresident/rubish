@@ -428,11 +428,16 @@ struct item*  lookupItemPtr( struct interp *interp, char **p, struct item *symbo
 char *typeMismatchString[] = { "'undefined'", "'nothing'", "expected symbol", "expected number", "expected string", "expected function", "expected array", "expected fileport", "?1", "?2", "?3", "?4", "?5", "?6", "?7", "?8", "?9", "?a", "?b" };
 
 struct item  getValueByType( struct interp *interp, char **p, int type ){
- char *start = *p;  struct item result = getValue(interp,p);
+ struct item result = getValue(interp,p);
  if( result.type == ERROR ) return result;
  if( result.type != type ){
-  if( type == NUMBER && result.type == UNDEFINED ){  result.type = NUMBER;  result.data.number = 0;  return result;  }
-  interp->errorMessage = paramsRemain(&start) ? typeMismatchString[type] : "expected a value";
+  if( result.type == UNDEFINED ){
+   switch( type ){
+    case NUMBER:  return NUMBERITEM(0);
+    case STRING:  return (struct item){ STRING, { .string = (struct string){ NULL, 0, "" } }};
+   }
+  }
+  interp->errorMessage = (result.type == NOTHING) ? "expected a value" : typeMismatchString[type];
   deleteItem( &result );
   return ERRORITEM(*p);
  }
@@ -445,13 +450,6 @@ struct item  getNumber( struct interp *interp, char **p ){
 
 struct item  getString( struct interp *interp, char **p ){
  return getValueByType( interp, p, STRING );
-}
-
-struct item  getString_AllowUndefinedItem( struct interp *interp, char **p ){
- struct item item = getValue( interp, p );  if( item.type == ERROR ) return item;
- if( item.type == UNDEFINED ){  item.type = STRING;  item.data.string = (struct string){ NULL, 0, "" };  }
- if( item.type != STRING ){  deleteItem( &item );  interp->errorMessage = "expected string";  item = ERRORITEM(*p);  }
- return item;
 }
 
 struct string charPtrToString( char *charPtr ){
@@ -1305,12 +1303,12 @@ struct string stringCat( struct string *a, struct string *b ){
 }
 
 struct item primitive_CatS( struct interp *interp, char **p ){
- struct item  a = getString_AllowUndefinedItem( interp,p );  if( a.type == ERROR ) return a;
- struct item  b = getString_AllowUndefinedItem( interp,p );  if( b.type == ERROR ){  deleteItem(&a);  return b;  }
+ struct item  a = getString( interp,p );  if( a.type == ERROR ) return a;
+ struct item  b = getString( interp,p );  if( b.type == ERROR ){  deleteItem(&a);  return b;  }
  struct item  c;  c.type = STRING;  c.data.string = stringCat( &a.data.string, &b.data.string );
  deleteItem(&a);  deleteItem(&b);
  while( paramsRemain(p) ){
-  a = getString_AllowUndefinedItem( interp,p );  if( a.type == ERROR ){  deleteItem(&c);  return a;  }
+  a = getString( interp,p );  if( a.type == ERROR ){  deleteItem(&c);  return a;  }
   b.data.string = stringCat( &c.data.string, &a.data.string );  deleteItem(&c);  deleteItem(&a);  c = b;
  }
  return c;
