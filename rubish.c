@@ -1328,9 +1328,7 @@ struct item primitive_StrS( struct interp *interp, char **p ){
 
 struct item primitive_ValS( struct interp *interp, char **p ){
  struct item n = getString( interp,p );  if( n.type == ERROR ) return n;
- char *endptr;
- double number = strtod( n.data.string.s, &endptr );
- deleteItem(&n);
+ char *endptr;  double number = strtod( n.data.string.s, &endptr );  deleteItem(&n);
  n.type = NUMBER;  n.data.number = number;
  return n;
 }

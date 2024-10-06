@@ -25,10 +25,10 @@ func £.get()(
 
 £.while 1 (
  (£.print stdout "> ")
- if (£.catch (£.eval £.get) retVal) (
+ if (£.catch (£.eval £.get) £.retVal) (
   £.print £.stdout £.error-message;
  )(
-  £.print £.stdout @retVal;
+  £.print £.stdout @£.retVal;
  )
 )
 ;
