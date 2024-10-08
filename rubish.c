@@ -91,7 +91,7 @@ struct item  peekItem( char **text ){
 }
 
 void deleteString( struct string s ){
- if( s.refCount ){ 
+ if( s.refCount ){
   if( *s.refCount -= 1 ) return;
   free( s.refCount );  free(s.s);
  }
@@ -1295,23 +1295,33 @@ struct item primitive_Delete( struct interp *interp, char **p ){
  return NUMBERITEM(1);
 }
 
-struct string stringCat( struct string *a, struct string *b ){
- struct string out;  out.refCount = malloc(sizeof(unsigned int));  *out.refCount = 1;
- out.length = a->length + b->length;  out.s = calloc( out.length+1, sizeof(char) );
- memcpy( out.s, a->s, a->length );  memcpy( out.s+a->length, b->s, b->length );
- return out;
-}
-
 struct item primitive_CatS( struct interp *interp, char **p ){
- struct item  a = getString( interp,p );  if( a.type == ERROR ) return a;
- struct item  b = getString( interp,p );  if( b.type == ERROR ){  deleteItem(&a);  return b;  }
- struct item  c;  c.type = STRING;  c.data.string = stringCat( &a.data.string, &b.data.string );
- deleteItem(&a);  deleteItem(&b);
- while( paramsRemain(p) ){
-  a = getString( interp,p );  if( a.type == ERROR ){  deleteItem(&c);  return a;  }
-  b.data.string = stringCat( &c.data.string, &a.data.string );  deleteItem(&c);  deleteItem(&a);  c = b;
+ unsigned int length = 0;  char *buf = NULL;
+ struct item item = UNDEFINEDITEM;
+ while(1){
+  item = getValue(interp,p);  if( item.type == ERROR ){  goto CatS_failure;  }
+  if( item.type == NOTHING ){
+   *p -= !! item.data.integer;
+   if( buf ){
+    buf[length] = 0;  unsigned int *refCount = malloc(sizeof(unsigned int));  *refCount = 1;  return (struct item){ STRING, { .string = (struct string){ refCount, length, buf } } };
+   }else{
+    return (struct item){ STRING, { .string = (struct string){ NULL, 0, "" } } };
+   }
+  }
+  if( item.type != STRING ){
+   deleteItem( &item );  interp->errorMessage = "cat$: expected string";  item = ERRORITEM(*p);  break;
+  }
+  if( ! item.data.string.length ){  deleteString( item.data.string );  continue;  }
+  unsigned int oldLength = length;  length += item.data.string.length;
+  if( oldLength > length ){
+   deleteItem( &item );  interp->errorMessage = "cat$: string too big";  item = ERRORITEM(*p);  break;
+  }
+  char *oldbuf = buf;  buf = realloc( buf, length + 1 );
+  if( ! buf ){  buf = oldbuf;  deleteItem( &item );  interp->errorMessage = "cat$: memory allocation failed";  item = ERRORITEM(*p);  break;  }
+  memcpy( buf + oldLength, item.data.string.s, item.data.string.length );  deleteItem( &item );
  }
- return c;
+ CatS_failure:
+ free( buf );  return item;
 }
 
 struct item primitive_StrS( struct interp *interp, char **p ){
@@ -1637,9 +1647,7 @@ struct item  primitive_Eval( struct interp *interp, char **p ){
   deleteItem( &str );  return UNDEFINEDITEM;
  }
  if( ! str.data.string.refCount ){
-  struct item new;  new.type = STRING;  new.data.string = charPtrToNewString( str.data.string.s, str.data.string.length );
-  deleteItem( &str );
-  str = new;
+  struct string new;  new = charPtrToNewString( str.data.string.s, str.data.string.length );  str.data.string = new;
  }
  struct item result = eval( interp, str.data.string.s );
  if( result.type == NOTHING ) result.type = UNDEFINED;
