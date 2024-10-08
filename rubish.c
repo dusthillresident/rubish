@@ -384,7 +384,6 @@ struct item  getValue( struct interp *interp, char **p ){
    return returnValue;
   } break;
  }
- //fprintf(stderr,"getValue: FIXME: unhandled: ");  printItem( stderr, item );  fprintf(stderr,"\n");
  return item;
 }
 
@@ -1271,6 +1270,7 @@ struct item  primitive_For( struct interp *interp, char **p ){
  struct item result; result.type = UNDEFINED;
  while( *varP != until && ((*varP < until)^sign) ){
   *p = code_p;  deleteItem( &result );  result = eval_p( interp, p, 1 );  end_p = *p;
+  if( var->value->type != NUMBER ) break;
   if( result.type == ERROR ) break;
   *varP += step;
  }
