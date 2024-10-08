@@ -995,7 +995,7 @@ struct item  primitive_Modulo( struct interp *interp, char **p ){
 struct item  primitive_##NAME( struct interp *interp, char **p ){ \
  struct item  a = getNumber( interp,p ); if( a.type == ERROR ) return a; \
  struct item  b = getNumber( interp,p ); if( b.type == ERROR ) return b; \
- a.data.number = (double)( ( CAST )a.data.number OPERATION ( CAST )b.data.number ); \
+ a.data.number = (double)(int)( ( CAST )(int)a.data.number OPERATION ( CAST )(int)b.data.number ); \
  return a; \
 }
 SHIFT_PRIMITIVE( ShiftLeft,  int, << )
