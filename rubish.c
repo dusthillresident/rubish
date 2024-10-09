@@ -645,6 +645,7 @@ struct item  primitive_Local( struct interp *interp, char **p ){
 const char *returnExceptionMsg = "! return exception";
 struct item  primitive_Return( struct interp *interp, char **p ){
  struct item value = getValue(interp,p);  if( value.type == ERROR ) return value;
+ if( value.type == NOTHING ) value.type = UNDEFINED;
  interp->errorMessage = (char*) returnExceptionMsg;  interp->returnValue = value;  return ERRORITEM(*p);
 }
 
@@ -1492,8 +1493,8 @@ struct item primitive_Array( struct interp *interp, char **p ){
 
 struct item  primitive_ItemType( struct interp *interp, char **p ){
  struct item item = getValue( interp, p );  if( item.type == ERROR ) return item;
- deleteItem( &item );  int type = item.type;
- item.type = NUMBER;  item.data.number = type;  return item;
+ if( item.type == NOTHING ) *p -= !!item.data.integer; else deleteItem( &item );
+ return NUMBERITEM( item.type );
 }
 
 struct item primitive_MakeArray( struct interp *interp, char **p ){
@@ -1517,7 +1518,7 @@ struct item primitive_MakeArray( struct interp *interp, char **p ){
 
 struct item  newCopyOfArray( struct interp *interp, struct item a ){
  if( a.type == UNDEFINED ) return a;
- if( a.type != ARRAY ){ printf( "fuck you\n" ); exit(1); }
+ if( a.type != ARRAY ){  printf( "BUG: newCopyOfArray was passed something that is not an array\n" );  exit(1);  }
  struct array *aa = a.data.array;
  struct array *bb = malloc( sizeof( struct array ) );
  bb->refCount = 1;  bb->chainRefCount = 0;  bb->arrayContainsMemoryResources = 0;  bb->nDims = aa->nDims;  bb->size = aa->size;
@@ -1571,11 +1572,12 @@ struct item primitive_Join( struct interp *interp, char **p ){
 struct item primitive_Append( struct interp *interp, char **p ){
  struct item a = _primitive_Join_getSingleDimensionalArrayOrUndefinedItem( interp, p );  if( a.type == ERROR ) return a;
  struct item b = getValue( interp, p );  if( b.type == ERROR ){  deleteItem( &a );  return b;  }
+ if( b.type == NOTHING ){  deleteItem( &a );  interp->errorMessage = "append: expected a value";  return ERRORITEM(*p);  }
  if( a.type == UNDEFINED ){
-  struct item out;  out.type = ARRAY;  out.data.array = makeSimpleArray( &b );  /*deleteItem( &b );*/
+  struct item out;  out.type = ARRAY;  out.data.array = makeSimpleArray( &b );
   return out;
  }else{
-  appendItemToSimpleArray( a.data.array, &b );  /*deleteItem( &b );*/
+  appendItemToSimpleArray( a.data.array, &b ); // we don't need to delete the free-floating reference of 'b', appendItemToSimpleArray does that
   return a;
  }
 }
@@ -1651,6 +1653,9 @@ struct item  primitive_Eval( struct interp *interp, char **p ){
  }
  struct item result = eval( interp, str.data.string.s );
  if( result.type == NOTHING ) result.type = UNDEFINED;
+ else if( result.type == STRING && ! result.data.string.refCount ){
+  result.data.string = newCopyOfString( result.data.string );
+ }
  deleteItem( &str );
  return result;
 }
@@ -1946,6 +1951,7 @@ struct item  evalTextFile( struct interp *interp, char *filename, int printInfoO
   // try to find out where the error occured, to print line and column info if possible
   printLineColumnInfo( interp, filename, text, (char*)result.data.ptr );
  }
+ if( result.type == STRING && ! result.data.string.refCount ) result.data.string = newCopyOfString( result.data.string );
  free( text );
  return result;
 }
