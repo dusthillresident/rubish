@@ -83,10 +83,12 @@ struct item primitive_DrawLine( struct interp *interp, char **p ){
 
 struct item primitive_Rectangle_( struct interp *interp, char **p, int filled ){
  struct item item;  int params[4];
- for(  int i=0;  i < 3;  i++  ){
+ for(  int i=0;  i < 4;  i++  ){
+  if( i == 3 && ! paramsRemain(p) ){
+   params[3] = params[2];  break;
+  }
   item = getNumber(interp,p);  if( item.type == ERROR ) return item;
   params[i] = item.data.number;
-  if( i==2 && ! paramsRemain(p) ){  params[3] = params[2];  break;  }
  }
  (filled ? fillRectangle : drawRectangle)( params[0], params[1], params[2], params[3] );
  return UNDEFINEDITEM;
