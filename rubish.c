@@ -693,6 +693,10 @@ struct item  callFunc( struct interp *interp, struct func *func, char **p ){
  }
  // evaluate the function body
  result = eval( interp, func->body );  interp->contextLevel -= 1;
+ // Catch return exception
+ if( interp->errorMessage == returnExceptionMsg ){  result = interp->returnValue;  interp->returnValue.type = 0;  interp->errorMessage = "retexp";  }
+ // If the result is a string directly from the program text (doesn't have its own space) we must copy it now or else it'll get destroyed by the cleanup
+ if( result.type == STRING && ! result.data.string.refCount ) result.data.string = newCopyOfString( result.data.string );
  // save the result, cleanup the local vars and stuff
  struct var *varP = interp->vars;
  while(1){
@@ -703,8 +707,6 @@ struct item  callFunc( struct interp *interp, struct func *func, char **p ){
  if( createdNewVars ){
   lastCreatedNewVar->next = interp->vars;  interp->vars = createdNewVars;
  }
- // Catch return exception
- if( interp->errorMessage == returnExceptionMsg ){  result = interp->returnValue;  interp->returnValue.type = 0;  interp->errorMessage = "retexp";  }
  return result; 
  callfunc_failure:
  if( result.type != ERROR ){  deleteItem( &result );  result = ERRORITEM(*p);  }
