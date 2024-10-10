@@ -86,7 +86,7 @@ struct item primitive_Rectangle_( struct interp *interp, char **p, int filled ){
  for(  int i=0;  i < 3;  i++  ){
   item = getNumber(interp,p);  if( item.type == ERROR ) return item;
   params[i] = item.data.number;
-  if( i==2 && ! paramsRemain(p) ) params[3] = params[2];
+  if( i==2 && ! paramsRemain(p) ){  params[3] = params[2];  break;  }
  }
  (filled ? fillRectangle : drawRectangle)( params[0], params[1], params[2], params[3] );
  return UNDEFINEDITEM;
@@ -149,6 +149,21 @@ struct item primitive_ToggleVsync( struct interp *interp, char **p ){
  return x;
 }
 
+struct item primitive_ClearScreen( struct interp *interp, char **p ){
+ clearScreen();  return UNDEFINEDITEM;
+}
+
+struct item primitive_SetBlendMode( struct interp *interp, char **p ){
+ struct item item = getNumber( interp, p );  if( item.type == ERROR ) return item;
+ unsigned int m = ((unsigned int)(int)item.data.number) % 5;
+ setBlendMode( m );
+ char *msg = (char*[]){ 
+ "SDL_BLENDMODE_NONE", "SDL_BLENDMODE_BLEND", "SDL_BLENDMODE_ADD",
+ "SDL_BLENDMODE_MOD", "SDL_BLENDMODE_MUL" 
+ }[m];
+ return (struct item){ STRING, { .string = (struct string){ NULL, strlen(msg), msg } } };
+}
+
 int main(int argc, char **argv){
 
  struct interp *interp = calloc( 1, sizeof(struct interp) );
@@ -160,10 +175,12 @@ int main(int argc, char **argv){
  installPrimitive( interp, primitive_MouseY, "mousey" );
  installPrimitive( interp, primitive_MouseZ, "mousez" );
  installPrimitive( interp, primitive_MouseB, "mouseb" );
- // now initialise the interpreter with the standard commands
- makeInterp( interp );
  installPrimitive( interp, primitive_HandleEvents, "handle-events" );
  installPrimitive( interp, primitive_UpdateDisplay, "update-display" );
+ installPrimitive( interp, primitive_ClearScreen, "clear-screen" );
+ installPrimitive( interp, primitive_SetBlendMode, "set-blend-mode" );
+ // now initialise the interpreter with the standard commands
+ makeInterp( interp );
  installPrimitive( interp, primitive_Colour, "colour" );
  installPrimitive( interp, primitive_DrawPixel, "draw-pixel" );
  installPrimitive( interp, primitive_DrawLine, "draw-line" );

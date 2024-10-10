@@ -113,15 +113,19 @@ void colour( unsigned char r, unsigned char g, unsigned char b, unsigned char a 
  currentColour = a << 24 | b << 16 | g << 8 | r;
 }
 
-void clearScreen(){
+void clearScreen(){  if( ! mySdl2IsRunning ) return;
  boxColor( myRenderer, 0, 0, winw, winh, 0xff000000 );
 }
 
-void toggleVsync( int on ){
+void toggleVsync( int on ){  if( ! mySdl2IsRunning ) return;
  SDL_GL_SetSwapInterval( !!on );
 }
 
-void handleEvents(){
+void setBlendMode( unsigned int m ){  if( ! mySdl2IsRunning ) return;
+ SDL_SetTextureBlendMode( myTexture, (int[]){ SDL_BLENDMODE_NONE, SDL_BLENDMODE_BLEND, SDL_BLENDMODE_ADD, SDL_BLENDMODE_MOD, SDL_BLENDMODE_MUL }[m % 5] );
+}
+
+void handleEvents(){  if( ! mySdl2IsRunning ) return;
  SDL_Event event;
  while( SDL_PollEvent(&event) ){
   switch( event.type ){
