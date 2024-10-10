@@ -1592,16 +1592,17 @@ struct item  primitive_Dimensions( struct interp *interp, char **p ){
 }
 
 struct item  primitive_Length( struct interp *interp, char **p ){
- struct item item = getValue(interp,p);
- unsigned int result;
+ struct item item = getValue(interp,p);  unsigned int result;
  switch( item.type ){
-  case UNDEFINED: result = 0; break;
-  case STRING: result = item.data.string.length; break;
+  case ERROR:  return item;
+  case UNDEFINED:  result = 0; break;
+  case STRING:  result = item.data.string.length; break;
   case ARRAY:  result = item.data.array->dims[0]; break;
+  case NOTHING:  interp->errorMessage = "length: expected a value";  return ERRORITEM(*p);
   default:  deleteItem( &item );  interp->errorMessage = "length: invalid type";  return ERRORITEM(*p);
  }
  deleteItem( &item );
- struct item out;  out.type = NUMBER;  out.data.number = result;  return out;
+ return NUMBERITEM( result );
 }
 
 struct item  primitive_Error( struct interp *interp, char **p ){
