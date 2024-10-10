@@ -1652,8 +1652,7 @@ struct item  primitive_Eval( struct interp *interp, char **p ){
   struct string new;  new = charPtrToNewString( str.data.string.s, str.data.string.length );  str.data.string = new;
  }
  struct item result = eval( interp, str.data.string.s );
- if( result.type == NOTHING ) result.type = UNDEFINED;
- else if( result.type == STRING && ! result.data.string.refCount ){
+ if( result.type == STRING && ! result.data.string.refCount ){
   result.data.string = newCopyOfString( result.data.string );
  }
  deleteItem( &str );
