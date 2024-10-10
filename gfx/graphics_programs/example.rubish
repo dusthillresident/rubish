@@ -1,0 +1,151 @@
+start-graphics 800 600;
+toggle-vsync 1;
+
+set points ();
+
+set n-points 6;
+set n-plots 7;
+
+func make-point () (
+ make-array (rnd winw) (rnd winh) (+ -4 rnd 8) (+ -4 rnd 8)
+)
+
+for (i 0 n-points) (
+ set points append points make-point
+)
+set plots ()
+
+func _mp (@x @xm b) (
+ if (||  < (set x + x xm) 0  > x b) (
+  set x (if < x 0 (0)(b))
+  set xm neg xm
+ )
+)
+func move-point (p) (_mp p[0] p[2] winw; _mp p[1] p[3] winh)
+
+func sn(x)(
+ set x * x 2;
+ local v (fract x);
+ set v (if (& x 1)(- 1 v)(v))
+ set v * v v;
+ set v (if(& x 1)(* v 0.5)(- 1 * v 0.5))
+ if(& x 2)(v)(- 1 v)
+)
+
+if 0 (
+ for (i 0 winw) (
+  draw-pixel i (* winh sn * 1 / i winw)
+ )
+ while 1(
+  handle-events update-display
+ )
+)
+
+set cv 0x10;
+set bv 0x0a000000;
+colour cv cv cv; fill-rectangle 0 0 winw winh;
+set w winw
+set h winh
+
+func colfn(m)(| cv * 255 sn * framenum m)
+
+if 0 ( https://www.udio.com/songs/vEh6xzL1Eqgg1H28k8NRvf
+
+Description
+The ultimate conclusion of the saga of Vladimir Putin's testes. His testes are ultimately smashed as the crowd celebrates with this epic prog rock concert.
+
+Lyrics
+
+With a brass band playing and our spirits high,
+We marched together, reaching for the sky.
+Synthpop beats and soul singers in the air,
+A joyful celebration, we were almost there.
+Woooooooo,
+
+(Chorus)
+Testes (Vladimir Putin)
+His testes
+Justice
+Tyrant's fall begins
+
+(Pre-chorus)
+And that was when we made the decision to smash his nuts (Vladimir Putin) oooOOOOOOOoooohhhh his testes.
+The reprehensible villainous testes of Vladimir Putin. (his testes)
+Justice for the people, oh the tyrant's fall begins.
+We're gonna smash them! Vlaaadimir Putin,
+(his testes testes (wooooOOOOOOOO00000 wooooooOOOO00))
+
+(Bridge)  
+Liberation's joy, we felt it in our hearts,  
+No more oppression, tearing lives apart.  
+With every beat, with every soulful note,  
+We CRUSHED the evil, freedom's anthem wrote.
+
+(Chorus)  
+And that was when we made the decision to smash his nuts (Vladimir Putin!) OHHHHHHHHHHH HIS TESTES!
+The reprehensible villainous testes of (Vladimir Putin) Vladimir Putin!!  
+We're gonna SMASH them.. (testes testes!)
+JUSTICE for the people! OHH the tyrant's FALL! BEGINSsssah
+
+(Outro)  
+In 3/4 time, with harmony so sweet,  
+We danced in the streets, to freedom's beat.  
+
+The world united, no more to divide,  
+Vladimir Putin's reign cast aside.  
+
+(Chorus)  
+And that was when we made the decision to smash his nuts (Vladimir Putinasdnmbfa hdghdjhj)
+blbjghiuhguehghrtu OOOOOOOOOOOOOOOOOOOOOOO!!!!!!!
+BLAUHHH
+
+Vladimir Putiiiiin (his testeeeees)
+jubrijtiici
+Tyrant
+OOOOOOOOOOOOAAAAAAAAAAAAAAAAAAAA!!!!!!!
+SMAAAAAAAAAAAAAAAA(SMASH THEM)
+Vladimir Putiiiiin (his testeeeees)
+jusstiiice
+Justice for the people oh the tyrant's fall begins!
+
+With a brass band playing and (testeeees) high,
+We marched together, (testes) for the sky.
+Synthpop beats and soul singers in the air,
+A joyful celebration, we were almost there.
+
+And that was when we made the decision to smash his nuts (vladimir putin)
+His testes (testes)
+
+The time was at hand, the advent of justice
+(Outro)
+Victorious dawn, the light in our eyes,
+Justice is served, hear the people's cries.
+The chains are broken, freedom reigns,
+In harmony we sing, without any chains.
+(Chorus)
+Thank you for listening!
+Woo! (Yeahh)
+Thank you so much! thank you!
+(yeah man we did it!)
+(smashed his balls bigtime, hell yeah))
+
+set framenum 0
+while 1(
+ set framenum + framenum 1;
+ handle-events
+ if(|| != winw w != winh h)(colour cv cv cv; fill-rectangle 0 0 winw winh; set w winw set h winh)
+ set-blend-mode 3;
+ colour bv;
+ fill-rectangle 0 0 winw winh
+ set-blend-mode 1;
+ colour colfn 0.0176 colfn 0.014461 colfn 0.01117;
+ foreach point points (
+  move-point point;
+  #draw-circle point[0] point[1] 10;
+ )
+ for (i 0 n-points) (
+  set j % (+ 1 i) n-points;
+  draw-line points[i][0] points[i][1] points[j][0] points[j][1] 
+ )
+ update-display
+)
