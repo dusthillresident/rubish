@@ -4,7 +4,7 @@ foreach i (make-array "()" "[]") (
  set £.p[byte-get i 1] -1;
 )
 
-foreach i (make-array "local" "while" "print" "stdin" "stdout" "set" "quit" "=" "&&" "cat$" "chr$" "error-message" "catch" "+" "!" "<" "eval" "get-byte" "if" "return" "file-eof") (
+foreach i (make-array "local" "while" "print" "stdin" "stdout" "set" "quit" "=" "&&" "cat$" "chr$" "error-message" "catch" "+" "!" "<" "eval" "get-byte" "if" "return" "file-eof?") (
  eval cat$ "set £." i " @" i;
 )
 
@@ -25,10 +25,10 @@ func £.get()(
 
 £.while 1 (
  (£.print £.stdout "> ")
- if (£.catch (£.eval £.get) £.retVal) (
+ £.if (£.catch (£.eval £.get) £.retVal) (
   £.print £.stdout £.error-message;
  )(
-  if(£.file-eof £.stdin)(£.return 0)
+  £.if(£.file-eof? £.stdin)(£.return 0)
   £.print £.stdout @£.retVal;
  )
 )

@@ -153,7 +153,6 @@ int ch_checkIfSupported( struct checkHistory *surveyed, struct array *array, str
   if( surveyed->ptrs[i].supported && surveyed->ptrs[i].containsThis ) return 1;
  }
  if( ! supported ) return 0;
- propagate_supported_loop:
  for(  unsigned int i = 0;  i < surveyed->n;  i++  ){
   if( surveyed->ptrs[i].supported && surveyed->ptrs[i].count ){
    surveyed->ptrs[i].count = 0;  struct array *thisArray = (struct array*)surveyed->ptrs[i].ptr;
@@ -220,9 +219,7 @@ void deleteItemWithParentArray( struct item *item, struct array *parentArray ){
  }
 }
 
-void deleteItem( struct item *item ){
- deleteItemWithParentArray( item, NULL );
-}
+void deleteItem( struct item *item ){  deleteItemWithParentArray( item, NULL );  }
 
 void deleteVar( struct interp *interp, struct var *var ){
  struct var *prev = var->prev;
@@ -391,8 +388,9 @@ struct item* indexIntoArray( struct interp *interp, char **p, struct item *error
  getItem(p);
  if( parentArrayReturn ) *parentArrayReturn = array;
  unsigned int i;  unsigned int arrayIndex = 0;
- for(  i = 0;  i < array->nDims;  i ++  ){
+ for(  i = 0;  i < array->nDims;  i ++  ){  indexIntoArray_LoopStart:
   struct item index = getValue(interp,p);  if( index.type == ERROR ){  *errorReturn = index;  *infoReturn = 1;  return NULL;  }
+  if( index.type == NOTHING && index.data.integer == STOP ) goto indexIntoArray_LoopStart;
   if( index.type != NUMBER ){  deleteItem( &index );  interp->errorMessage = "bad array subscript";  *errorReturn = ERRORITEM(*p);  *infoReturn = 1;  return NULL;  }
   unsigned int thisIndex = (long long int)index.data.number;
   if(  thisIndex < 0  ||  thisIndex >= array->dims[i]  ){
@@ -1310,8 +1308,9 @@ struct item primitive_CatS( struct interp *interp, char **p ){
    }else{
     return (struct item){ STRING, { .string = (struct string){ NULL, 0, "" } } };
    }
-  }
-  if( item.type != STRING ){
+  }else if( item.type == UNDEFINED ){
+   item.type = STRING;  item.data.string = (struct string){ NULL, 0, "" };
+  }else if( item.type != STRING ){
    deleteItem( &item );  interp->errorMessage = "cat$: expected string";  item = ERRORITEM(*p);  break;
   }
   if( ! item.data.string.length ){  deleteString( item.data.string );  continue;  }
@@ -1757,7 +1756,7 @@ struct interp*  makeInterp( struct interp *interp ){
  installPrimitive( interp, primitive_FileRead,		"file-read" );
  installPrimitive( interp, primitive_FileWrite,		"file-write" );
  installPrimitive( interp, primitive_FileSize,		"file-size" );
- installPrimitive( interp, primitive_FileEof,		"file-eof" );
+ installPrimitive( interp, primitive_FileEof,		"file-eof?" );
  installPrimitive( interp, primitive_FileTell,		"file-tell" );
  installPrimitive( interp, primitive_FileSeekTo,	"file-seek-to" );
  installPrimitive( interp, primitive_FileSeekFrom,	"file-seek-from-cur" );
