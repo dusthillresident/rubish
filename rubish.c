@@ -480,7 +480,7 @@ void printItem( FILE *port, struct item item ){
    if( (long long int)item.data.number == item.data.number )
     fprintf( port, "%lld", (long long int)item.data.number );
    else
-    fprintf( port, "%.16f", item.data.number );
+    fprintf( port, "%.17g", item.data.number );
    break;
   case STRING:		printString( port, &item.data.string ); break;
   case LPAREN:		fprintf( port, "[(]" ); break;
@@ -1334,7 +1334,7 @@ struct item primitive_StrS( struct interp *interp, char **p ){
  struct item n = getNumber( interp,p );  if( n.type == ERROR ) return n;
  char numberString[256];  unsigned int length;
  if( ((double)(long long int)n.data.number != n.data.number) || ( (n.data.number==n.data.number) && (n.data.number!=n.data.number) ) ) {
-  length = snprintf( numberString, 256, "%.16f", n.data.number );
+  length = snprintf( numberString, 256, "%.17g", n.data.number );
  }else{
   length = snprintf( numberString, 256, "%lld", (long long int) n.data.number );
  }
