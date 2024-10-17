@@ -321,6 +321,13 @@ struct var* installVar( struct interp *interp, struct var *var ){
  return var;
 }
 
+void unknownSymbolErrorMessage( struct interp *interp, struct string *name ){
+ strcpy( interp->errorMessageBuffer, "unknown symbol: " );
+ int l = name->length >= ERROR_MESSAGE_BUFFER_SIZE-17 ? ERROR_MESSAGE_BUFFER_SIZE-17 : name->length;
+ strncpy( interp->errorMessageBuffer+16, name->s, l );  interp->errorMessageBuffer[16+l] = 0;
+ interp->errorMessage = interp->errorMessageBuffer;
+}
+
 struct item  getValue( struct interp *interp, char **p ){
  struct item  item = getItem( p );  int ref=0;
  getValue_start:
@@ -348,7 +355,7 @@ struct item  getValue( struct interp *interp, char **p ){
   }
   case SYMBOL: {
    int infoReturn = 0;  struct item *itemPtr = lookupItemPtr( interp, p, &item, &infoReturn, NULL );  if( infoReturn ) return item;
-   if( ! itemPtr ){  fprintf(stderr, "symbol is: ");  printString(stderr,&item.data.string);  putchar(10);  interp->errorMessage = "unknown symbol";  return ERRORITEM(*p);  }
+   if( ! itemPtr ){  unknownSymbolErrorMessage(interp, &item.data.string);  return ERRORITEM(*p);  } 
    if( ref || itemPtr->type != FUNCTION ){
     storeItem( &item, itemPtr, NULL ); // increment ref count for the free-floating instance of the item
     if( item.type == ARRAY ) goto getValue_start;
@@ -388,7 +395,7 @@ struct item* indexIntoArray( struct interp *interp, char **p, struct item *error
  getItem(p);
  if( parentArrayReturn ) *parentArrayReturn = array;
  unsigned int i;  unsigned int arrayIndex = 0;
- for(  i = 0;  i < array->nDims;  i ++  ){  indexIntoArray_LoopStart:
+ for(  i = 0;  i < array->nDims;  i ++  ){  indexIntoArray_LoopStart: ;
   struct item index = getValue(interp,p);  if( index.type == ERROR ){  *errorReturn = index;  *infoReturn = 1;  return NULL;  }
   if( index.type == NOTHING && index.data.integer == STOP ) goto indexIntoArray_LoopStart;
   if( index.type != NUMBER ){  deleteItem( &index );  interp->errorMessage = "bad array subscript";  *errorReturn = ERRORITEM(*p);  *infoReturn = 1;  return NULL;  }
@@ -1291,10 +1298,12 @@ struct item  primitive_For( struct interp *interp, char **p ){
 struct item primitive_Delete( struct interp *interp, char **p ){
  struct item symbol = getItem(p);
  if( symbol.type != SYMBOL ){  interp->errorMessage = "delete: expected name of variable to delete";  return ERRORITEM(*p);  }
- struct var *var = lookupVarByName( interp, &symbol.data.string );
- if( !var ) return UNDEFINEDITEM;
- if( var->flags ){
+ struct var *var = lookupVarByName( interp, &symbol.data.string );  if( !var ) return NUMBERITEM(0);
+ if( var->flags & (VARREF | VARMANAGED) ){
   interp->errorMessage = "delete: can't delete this variable, it's protected or managed";  return ERRORITEM(*p);
+ }
+ if( (var->flags & VARLOCAL) && interp->contextLevel != var->contextLevel ){
+  interp->errorMessage = "delete: can't delete local variables belonging to other functions";  return ERRORITEM(*p);
  }
  deleteVar( interp, var );
  return NUMBERITEM(1);
