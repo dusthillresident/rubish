@@ -28,7 +28,7 @@ struct array { unsigned int refCount, chainRefCount, nDims, *dims; size_t size; 
 #define NUMBERITEM(N)	((struct item){NUMBER, {.number=(N)}})
 struct var { int flags;  struct string name;  struct item *value;  struct var *prev; struct var *next;  unsigned int contextLevel; struct array *parentArray; };
 #define ERROR_MESSAGE_BUFFER_SIZE 64
-struct interp { struct var *vars; char *errorMessage; char errorMessageBuffer[ERROR_MESSAGE_BUFFER_SIZE]; unsigned int contextLevel, levelLimit; double rndSeed; struct item returnValue; };
+struct interp { struct var *vars; char *errorMessage; char errorMessageBuffer[ERROR_MESSAGE_BUFFER_SIZE]; unsigned int contextLevel, evalLevel, levelLimit; double rndSeed; struct item returnValue; };
 enum varFlag { VARLOCAL = 0b1, VARREF = 0b10, VARREST = 0b100, VARMANAGED = 0b1000 };
 struct func { unsigned int refCount; struct item (*primitive)(struct interp*,char**); struct var *params; char *body; };
 #define isValue(type)  ( !(type) || ( (type)>NOTHING && (type)<ERROR ) )
@@ -43,7 +43,7 @@ int checkFileIsAppropriate( struct interp *interp, char **p, struct item *filepo
 struct string charPtrToNewString( char *charPtr, unsigned int length );
 struct item  primitive_Source( struct interp *interp, char **p );
 
-int specialChar( char c ){ switch (c) { case '(': case ')': case '[': case ']': case ';': case '"': return 1; default: return 0; } }
+int specialChar( char c ){ switch (c) { case '(': case ')': case '[': case ']': case ';': case '"': case '@': return 1; default: return 0; } }
 int symbolChar(  char c ){ return c && !isspace(c) && !specialChar(c); }
 void printItem( FILE *port, struct item item );
 int paramsRemain( char **p );
@@ -651,7 +651,7 @@ struct item  primitive_Return( struct interp *interp, char **p ){
 #define VAR_IS_REST(VAR) (VAR->flags & VARREST)
 
 struct item  callFunc( struct interp *interp, struct func *func, char **p ){
- if( interp->contextLevel >= interp->levelLimit ){  interp->errorMessage = "function call: exceeded recursion limit";  return ERRORITEM(*p);  }
+ if( interp->contextLevel + interp->evalLevel >= interp->levelLimit ){  interp->errorMessage = "function call: exceeded recursion limit";  return ERRORITEM(*p);  }
  struct var *previousTopVar = interp->vars;
  interp->contextLevel += 1;  unsigned int thisContextLevel = interp->contextLevel;
  struct item result = UNDEFINEDITEM;
@@ -969,8 +969,8 @@ struct item  primitive_Set( struct interp *interp, char **p ){
 
 #define MATHS_PRIMITIVE( NAME, OPERATION ) \
 struct item  primitive_##NAME( struct interp *interp, char **p ){ \
- struct item  a = getNumber( interp,p ); if( a.type == ERROR ) return a; \
- struct item  b = getNumber( interp,p ); if( b.type == ERROR ) return b; \
+ struct item  a = getNumber( interp,p );  if( a.type == ERROR ) return a; \
+ struct item  b = getNumber( interp,p );  if( b.type == ERROR ) return b; \
  a.data.number OPERATION##= b.data.number; \
  while( paramsRemain(p) ){ \
   b = getNumber( interp,p ); if( b.type == ERROR ) return b; \
@@ -984,8 +984,8 @@ MATHS_PRIMITIVE(Mul,*)
 MATHS_PRIMITIVE(Div,/)
 
 struct item  primitive_Modulo( struct interp *interp, char **p ){
- struct item  a = getNumber( interp,p ); if( a.type == ERROR ) return a;
- struct item  b = getNumber( interp,p ); if( b.type == ERROR ) return b;
+ struct item  a = getNumber( interp,p );  if( a.type == ERROR ) return a;
+ struct item  b = getNumber( interp,p );  if( b.type == ERROR ) return b;
  int aa = a.data.number, bb = b.data.number;
  if( ! bb ){  interp->errorMessage = "modulo division by zero";  return ERRORITEM(*p);  }
  a.data.number = aa % bb;
@@ -994,8 +994,8 @@ struct item  primitive_Modulo( struct interp *interp, char **p ){
 
 #define SHIFT_PRIMITIVE( NAME, CAST, OPERATION ) \
 struct item  primitive_##NAME( struct interp *interp, char **p ){ \
- struct item  a = getNumber( interp,p ); if( a.type == ERROR ) return a; \
- struct item  b = getNumber( interp,p ); if( b.type == ERROR ) return b; \
+ struct item  a = getNumber( interp,p );  if( a.type == ERROR ) return a; \
+ struct item  b = getNumber( interp,p );  if( b.type == ERROR ) return b; \
  a.data.number = (double)(int)( ( CAST )(int)a.data.number OPERATION ( CAST )(int)b.data.number ); \
  return a; \
 }
@@ -1005,8 +1005,8 @@ SHIFT_PRIMITIVE( ShiftShiftRight, unsigned int, >> )
 
 #define BITWISE_PRIMITIVE( NAME, OPERATION ) \
 struct item  primitive_##NAME( struct interp *interp, char **p ){ \
- struct item  a = getNumber( interp,p ); if( a.type == ERROR ) return a; \
- struct item  b = getNumber( interp,p ); if( b.type == ERROR ) return b; \
+ struct item  a = getNumber( interp,p );  if( a.type == ERROR ) return a; \
+ struct item  b = getNumber( interp,p );  if( b.type == ERROR ) return b; \
  int result = (int)a.data.number OPERATION (int)b.data.number; \
  while( paramsRemain(p) ){ \
   a = getNumber( interp,p ); if( a.type == ERROR ) return a; \
@@ -1020,8 +1020,8 @@ BITWISE_PRIMITIVE( BitwiseXor, ^ )
 
 #define COMPARISON_PRIMITIVE( NAME, OPERATION ) \
 struct item  primitive_##NAME( struct interp *interp, char **p ){ \
- struct item  a = getNumber( interp,p ); if( a.type == ERROR ) return a; \
- struct item  b = getNumber( interp,p ); if( b.type == ERROR ) return b; \
+ struct item  a = getNumber( interp,p );  if( a.type == ERROR ) return a; \
+ struct item  b = getNumber( interp,p );  if( b.type == ERROR ) return b; \
  a.data.number = a.data.number OPERATION b.data.number; \
  return a; \
 }
@@ -1034,30 +1034,29 @@ COMPARISON_PRIMITIVE( GreaterEqual, >= )
 
 #define UNARY_MATHS_PRIMITIVE( NAME, TYPE, OPERATION ) \
 struct item  primitive_##NAME( struct interp *interp, char **p ){ \
- struct item  a = getNumber( interp,p ); if( a.type == ERROR ) return a; \
+ struct item  a = getNumber( interp,p );  if( a.type == ERROR ) return a; \
  TYPE result = 0; \
  result = OPERATION ( TYPE ) a.data.number; \
  a.data.number = result; \
  return a; \
 }
 UNARY_MATHS_PRIMITIVE( Neg, double, - )
-UNARY_MATHS_PRIMITIVE( Not, double, ! )
 UNARY_MATHS_PRIMITIVE( BitwiseNot, int, ~ )
 
 struct item  primitive_Int( struct interp *interp, char **p ){
- struct item  a = getNumber( interp,p ); if( a.type == ERROR ) return a;
+ struct item  a = getNumber( interp,p );  if( a.type == ERROR ) return a;
  a.data.number = (int)a.data.number;
  return a;
 }
 
 struct item  primitive_Sgn( struct interp *interp, char **p ){
- struct item  a = getNumber( interp,p ); if( a.type == ERROR ) return a;
+ struct item  a = getNumber( interp,p );  if( a.type == ERROR ) return a;
  a.data.number = a.data.number ? ( a.data.number < 0 ? -1.0 : 1.0 ) : 0.0;
  return a;
 }
 
 struct item  primitive_Abs( struct interp *interp, char **p ){
- struct item  a = getNumber( interp,p ); if( a.type == ERROR ) return a;
+ struct item  a = getNumber( interp,p );  if( a.type == ERROR ) return a;
  a.data.number = a.data.number < 0 ? - a.data.number : a.data.number;
  return a;
 }
@@ -1081,6 +1080,11 @@ struct item  getBoolean( struct interp *interp, char **p ){
  struct item item = getValue(interp,p);
  if( item.type != NUMBER ) itemToBoolean( interp, &item, p );
  return item;
+}
+
+struct item  primitive_Not( struct interp *interp, char **p ){ \
+ struct item v = getBoolean( interp,p );  if( v.type == ERROR ) return v;
+ v.data.number = ! v.data.number;  return v;
 }
 
 struct item  primitive_If( struct interp *interp, char **p ){
@@ -1645,6 +1649,7 @@ struct item  primitive_Catch( struct interp *interp, char **p ){
 }
 
 struct item  primitive_Eval( struct interp *interp, char **p ){
+ if( interp->evalLevel + interp->contextLevel >= interp->levelLimit ){  interp->errorMessage = "eval: exceeded recursion limit";  return ERRORITEM(*p);  }
  struct item str = getValue(interp,p);  if( str.type == ERROR ) return str;
  if( str.type != STRING ){  deleteItem( &str );  interp->errorMessage = "eval: expected program string";  return ERRORITEM(*p);  }
  if( ! str.data.string.length ){
@@ -1653,7 +1658,7 @@ struct item  primitive_Eval( struct interp *interp, char **p ){
  if( ! str.data.string.refCount ){
   struct string new;  new = charPtrToNewString( str.data.string.s, str.data.string.length );  str.data.string = new;
  }
- struct item result = eval( interp, str.data.string.s );
+ interp->evalLevel += 1;  struct item result = eval( interp, str.data.string.s );  interp->evalLevel -= 1;
  if( result.type == STRING && ! result.data.string.refCount ){
   result.data.string = newCopyOfString( result.data.string );
  }
@@ -1958,8 +1963,9 @@ struct item  evalTextFile( struct interp *interp, char *filename, int printInfoO
 }
 
 struct item  primitive_Source( struct interp *interp, char **p ){
+ if( interp->evalLevel + interp->contextLevel >= interp->levelLimit ){  interp->errorMessage = "source: exceeded recursion limit";  return ERRORITEM(*p);  }
  struct item filepath = getNullTerminatedString(interp,p);  if(filepath.type == ERROR) return filepath;
- struct item result = evalTextFile( interp, filepath.data.string.s, 0 );
+ interp->evalLevel += 1;  struct item result = evalTextFile( interp, filepath.data.string.s, 0 );  interp->evalLevel -= 1;
  deleteItem( &filepath );
  return result;
 }
