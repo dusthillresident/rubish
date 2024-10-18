@@ -483,12 +483,7 @@ void printItem( FILE *port, struct item item ){
   case NOTHING:		fprintf( port, "[NOTHING]" ); break;
   case UNDEFINED:	fprintf( port, "[UNDEFINED]" ); break;
   case SYMBOL:		fprintf( port, "[SYMBOL:'" ); printString( port, &item.data.string); fprintf( port, "']" );  break;
-  case NUMBER:		
-   if( (long long int)item.data.number == item.data.number )
-    fprintf( port, "%lld", (long long int)item.data.number );
-   else
-    fprintf( port, "%.17g", item.data.number );
-   break;
+  case NUMBER:		fprintf( port, "%.17g", item.data.number );  break;
   case STRING:		printString( port, &item.data.string ); break;
   case LPAREN:		fprintf( port, "[(]" ); break;
   case RPAREN:		fprintf( port, "[)]" ); break;
@@ -1341,12 +1336,7 @@ struct item primitive_CatS( struct interp *interp, char **p ){
 
 struct item primitive_StrS( struct interp *interp, char **p ){
  struct item n = getNumber( interp,p );  if( n.type == ERROR ) return n;
- char numberString[256];  unsigned int length;
- if( ((double)(long long int)n.data.number != n.data.number) || ( (n.data.number==n.data.number) && (n.data.number!=n.data.number) ) ) {
-  length = snprintf( numberString, 256, "%.17g", n.data.number );
- }else{
-  length = snprintf( numberString, 256, "%lld", (long long int) n.data.number );
- }
+ char numberString[256];  unsigned int length = snprintf( numberString, 256, "%.17g", n.data.number );
  n.type = STRING;  n.data.string = charPtrToNewString( numberString, length );
  return n; 
 }
@@ -1723,13 +1713,15 @@ struct item  primitive_Quit( struct interp *interp, char **p ){
 }
 
 struct item primitive_StringInParens( struct interp *interp, char **p ){
- if( peekItem(p).type != LPAREN ){
+ if( getItem(p).type != LPAREN ){
   interp->errorMessage = "string-in-parens: expected parens. The contents of the parens will be returned as a string";  return ERRORITEM(*p);
  }
- char *start = *p;  getItem(&start);
- if( skipParen(p) ){
-  interp->errorMessage = "string-in-parens: missing ')'";  return ERRORITEM(start);
+ char *start = *p;  int level = 1;
+ while( *p && level ){
+  if( **p == '(' ) level += 1; else if( **p == ')') level -= 1;
+  *p += 1;  
  }
+ if( ! *p ){  interp->errorMessage = "string-in-parens: missing ')'";  return ERRORITEM(start);  }
  char *end = *p - 1;
  struct item out;  out.type = STRING;  out.data.string = (struct string){ NULL, end-start, start };  return out;
 }
