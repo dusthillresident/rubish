@@ -7,7 +7,7 @@ set n-points 6;
 set n-plots 7;
 
 func make-point () (
- make-array (rnd winw) (rnd winh) (+ -4 rnd 8) (+ -4 rnd 8)
+ make-array (rnd winw) (rnd winh) (+ -8 rnd 16) (+ -8 rnd 16)
 )
 
 for (i 0 n-points) (
@@ -24,7 +24,7 @@ func _mp (@x @xm b) (
 func move-point (p) (_mp p[0] p[2] winw; _mp p[1] p[3] winh)
 
 func sn(x)(
- set x * x 2;
+ set x * x 4;
  local v (fract x);
  set v (if (& x 1)(- 1 v)(v))
  set v * v v;
@@ -47,7 +47,6 @@ colour cv cv cv; fill-rectangle 0 0 winw winh;
 set w winw
 set h winh
 
-func colfn(m)(| cv * 255 sn * framenum m)
 
 if 0 ( https://www.udio.com/songs/vEh6xzL1Eqgg1H28k8NRvf
 
@@ -127,18 +126,30 @@ Thank you for listening!
 Woo! (Yeahh)
 Thank you so much! thank you!
 (yeah man we did it!)
-(smashed his balls bigtime, hell yeah))
+(smashed his balls bigtime, hell yeah)
+)
 
-set framenum 0
+set fc 0
+func colfn(o m)( + 79 * 176 sn + o * m fc )
+if 0 (
+handle-events
+func sin(x)(* 2 - sn x 0.5)
+for (fc 0 2 / 2 128) (
+ colour colfn 0 1 colfn(/ 1 3)1 colfn(/ 1 3)0.5;
+ fill-circle (+ (* 250 sin * 0.5 fc) >> winw 1) (+ (* 250 sin + 0.25 * 0.5 fc) >> winh 1) 40
+)
+while 1(handle-events update-display);
+)
+
 while 1(
- set framenum + framenum 1;
+ set fc + fc 0.01; if(> fc 2)(set fc - fc 2)
  handle-events
  if(|| != winw w != winh h)(colour cv cv cv; fill-rectangle 0 0 winw winh; set w winw set h winh)
  set-blend-mode 3;
  colour bv;
  fill-rectangle 0 0 winw winh
  set-blend-mode 1;
- colour colfn 0.0176 colfn 0.014461 colfn 0.01117;
+ colour colfn 0 1 colfn(/ 1 3)1 colfn(/ 1 3)0.5;
  foreach point points (
   move-point point;
   #draw-circle point[0] point[1] 10;
