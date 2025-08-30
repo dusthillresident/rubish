@@ -12,5 +12,5 @@ cc rubish.c -o temprubish
  print fout " 0 };";
 '
 rm temprubish*
-cc -DINCLUDE_PROMPT -g rubish.c -o rdebug
-cc -DINCLUDE_PROMPT -O2 rubish.c -o rubish
+cc -Wall -DINCLUDE_PROMPT -DMATHSLIB -g rubish.c -lm -o rdebug
+cc -Wall -DINCLUDE_PROMPT -DMATHSLIB -O2 rubish.c -lm -o rubish

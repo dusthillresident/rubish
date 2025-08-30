@@ -30,6 +30,7 @@ func £.get()(
  )(
   £.if(£.file-eof? £.stdin)(£.return 0)
   £.print £.stdout @£.retVal;
+  £.set _ @£.retVal;
  )
 )
 ;

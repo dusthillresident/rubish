@@ -17,7 +17,7 @@ struct string; struct item; struct var; struct interp; struct func; struct array
 struct string { unsigned int *refCount; unsigned int length; char *s; };
 enum fileportFlags { FPWRITE = 0b1, FPREAD = 0b10, FPREADWRITE = 0b11, FPMANAGED = 0b100 };
 struct fileport { unsigned int refCount; FILE* fp; int flags; };
-enum itemType { UNDEFINED, NOTHING, SYMBOL, NUMBER, STRING, FUNCTION, ARRAY, FILEPORT, ERROR,   LPAREN, RPAREN, LBRACKET, RBRACKET, STOP, REF };
+enum itemType { UNDEFINED, NOTHING, SYMBOL, NUMBER, STRING, FUNCTION, ARRAY, FILEPORT, ERROR,   LPAREN, RPAREN, LBRACKET, RBRACKET, STOP, REF, BOXACCESS };
 struct item { int type; union { void *ptr; double number; struct string string; struct func *func; struct array *array; struct fileport *fileport; int integer; } data; };
 enum memoryResourceType { RESOURCE = 0b1, ARRAYRESOURCE = 0b10 };
 struct array { unsigned int refCount, chainRefCount, nDims, *dims; size_t size; struct item *itemArray; int arrayContainsMemoryResources; };
@@ -26,6 +26,8 @@ struct array { unsigned int refCount, chainRefCount, nDims, *dims; size_t size; 
 #define NOTHINGITEMOFTYPE(N)	((struct item){NOTHING, {.integer=N}})
 #define UNDEFINEDITEM 	((struct item){UNDEFINED, {NULL}})
 #define NUMBERITEM(N)	((struct item){NUMBER, {.number=(N)}})
+#define STRINGITEM( refcountptr, l, s ) ((struct item){ STRING, { .string = (struct string){ refcountptr, l, s } } })
+#define EMPTYSTRINGITEM	STRINGITEM( NULL, 0, "" )
 struct var { int flags;  struct string name;  struct item *value;  struct var *prev; struct var *next;  unsigned int contextLevel; struct array *parentArray; };
 #define ERROR_MESSAGE_BUFFER_SIZE 64
 struct interp { struct var *vars; char *errorMessage; char errorMessageBuffer[ERROR_MESSAGE_BUFFER_SIZE]; unsigned int contextLevel, evalLevel, levelLimit; double rndSeed; struct item returnValue; };
@@ -43,15 +45,22 @@ int checkFileIsAppropriate( struct interp *interp, char **p, struct item *filepo
 struct string charPtrToNewString( char *charPtr, unsigned int length );
 struct item  primitive_Source( struct interp *interp, char **p );
 
-int specialChar( char c ){ switch (c) { case '(': case ')': case '[': case ']': case ';': case '"': case '@': return 1; default: return 0; } }
+int specialChar( char c ){ switch (c) { case '(': case ')': case '[': case ']': case ';': case '"': case '@': case ':': return 1; default: return 0; } }
 int symbolChar(  char c ){ return c && !isspace(c) && !specialChar(c); }
 void printItem( FILE *port, struct item item );
 int paramsRemain( char **p );
 void deleteItem( struct item *item );
 void deleteAllVars( struct interp *interp, struct var *var );
 void printString( FILE *port, struct string *string );
-struct item*  lookupItemPtr( struct interp *interp, char **p, struct item *symbol, int *infoReturn, struct array **parentArrayReturn );
+struct item*  lookupItemPtr( struct interp *interp, char **p, struct item *symbol, int *infoReturn, struct array **parentArrayReturn, int createIfNotFound );
 struct item*  indexIntoArray( struct interp *interp, char **p, struct item *errorReturn, struct array *array, int *infoReturn, struct array **parentArrayReturn );
+void expandSimpleArray( struct array *array, size_t n );
+struct item*  boxLookup( struct interp *interp, char **p,  struct array *box, int notFoundAction,   struct item *errorReturn, int *infoReturn, struct array **parentArrayReturn );
+enum boxLookupNotFoundActions { BLU_RETURN = 0, BLU_ERROR, BLU_CREATE };
+
+#ifdef INCLUDE_PROMPT
+struct item primitive_Prompt( struct interp *interp, char **p );
+#endif
 
 struct item  getItem( char **text ){       getitem_start:
  while( **text && isspace(**text) ) *text += 1;
@@ -65,6 +74,7 @@ struct item  getItem( char **text ){       getitem_start:
   case '(': *text += 1; item.type = LPAREN; break;
   case ')': *text += 1; item.type = RPAREN; break;
   case ';': *text += 1; item.type = STOP; break;
+  case ':': *text += 1; item.type = BOXACCESS; break;
   case '"': {
    *text += 1;
    unsigned int length = 0;  char *start = *text;
@@ -93,6 +103,7 @@ struct item  peekItem( char **text ){
 void deleteString( struct string s ){
  if( s.refCount ){
   if( *s.refCount -= 1 ) return;
+  // fprintf( stderr, "string is being deleted <=\n" ); // FIXME
   free( s.refCount );  free(s.s);
  }
 }
@@ -290,8 +301,10 @@ void storeItem( struct item *dest, struct item *item, struct array *parentArray 
   case STRING:
    if( item->data.string.refCount )
     *item->data.string.refCount += 1;
-   else
-    {  item->data.string = charPtrToNewString( item->data.string.s, item->data.string.length );  *item->data.string.refCount += 1;  }
+   else {  
+    // fprintf( stderr, "this is hapening <=\n" ); // FIXME
+    item->data.string = charPtrToNewString( item->data.string.s, item->data.string.length );  *item->data.string.refCount += 1;
+   } // here
    break;
   case FILEPORT: item->data.fileport->refCount += 1; break;
  }
@@ -333,9 +346,17 @@ struct item  getValue( struct interp *interp, char **p ){
  getValue_start:
  switch( item.type ){
   case ARRAY: {
-   if( peekItem(p).type == LBRACKET ){
+   struct item  peek = peekItem(p);
+   if( peek.type == LBRACKET ){
     int infoReturn = 0;  struct item errorReturn; 
     struct item *itemPtr = indexIntoArray( interp, p, &errorReturn, item.data.array, &infoReturn, NULL );
+    if( infoReturn ){  deleteItem( &item );  return errorReturn;  }
+    struct item newItem;  newItem.type = 0;  storeItem( &newItem, itemPtr, NULL );  deleteItem( &item );
+    if( newItem.type == ARRAY ){  item = newItem;  goto getValue_start;  }
+    return newItem;
+   }else if( peek.type == BOXACCESS ){
+    struct item errorReturn = NOTHINGITEM;  int infoReturn = 0;
+    struct item *itemPtr = boxLookup( interp, p, item.data.array, BLU_ERROR, &errorReturn, &infoReturn, NULL );
     if( infoReturn ){  deleteItem( &item );  return errorReturn;  }
     struct item newItem;  newItem.type = 0;  storeItem( &newItem, itemPtr, NULL );  deleteItem( &item );
     if( newItem.type == ARRAY ){  item = newItem;  goto getValue_start;  }
@@ -348,16 +369,16 @@ struct item  getValue( struct interp *interp, char **p ){
   case NOTHING: case NUMBER: case STRING: case ERROR: case UNDEFINED:
    return item;
   case LBRACKET: {
-   interp->errorMessage = "syntax error or attempt to index something that isn't an array";  return ERRORITEM(*p);
+   interp->errorMessage = "attempt to index something that isn't an array, or syntax error";  return ERRORITEM(*p);
   }
   case REF: {
    ref = 1;  item = getItem( p);  goto getValue_start;
   }
   case SYMBOL: {
-   int infoReturn = 0;  struct item *itemPtr = lookupItemPtr( interp, p, &item, &infoReturn, NULL );  if( infoReturn ) return item;
+   int infoReturn = 0;  struct item *itemPtr = lookupItemPtr( interp, p, &item, &infoReturn, NULL, 0 );  if( infoReturn ) return item;
    if( ! itemPtr ){  unknownSymbolErrorMessage(interp, &item.data.string);  return ERRORITEM(*p);  } 
    if( ref || itemPtr->type != FUNCTION ){
-    storeItem( &item, itemPtr, NULL ); // increment ref count for the free-floating instance of the item
+    storeItem( &item, itemPtr, NULL ); // increment ref count for the 'free floating' instance of the item
     if( item.type == ARRAY ) goto getValue_start;
     return item;
    }else{
@@ -374,7 +395,11 @@ struct item  getValue( struct interp *interp, char **p ){
    }
    struct item rParen = getItem( p );
    if( rParen.type != RPAREN ){
-    interp->errorMessage = rParen.type == STOP ? "expected ')' (note: you can't use ';' inside an expression)" : "expected ')'";
+    if( rParen.type == LBRACKET ){
+     interp->errorMessage = "attempt to index something that isn't an array, or syntax error";
+    }else{
+     interp->errorMessage = (rParen.type == STOP ? "expected ')' (note: you can't use ';' inside an expression)" : "expected ')'");
+    }
     deleteItem( &item );
     return ERRORITEM(*p);
    }
@@ -409,11 +434,98 @@ struct item* indexIntoArray( struct interp *interp, char **p, struct item *error
  return array->itemArray + arrayIndex;
 }
 
-struct item*  lookupItemPtr( struct interp *interp, char **p, struct item *symbol, int *infoReturn, struct array **parentArrayReturn ){
+struct item*  boxLookup( struct interp *interp, char **p,  struct array *box, int notFoundAction,   struct item *errorReturn, int *infoReturn, struct array **parentArrayReturn ){
+ struct item  *itemPtr;  struct item  key = UNDEFINEDITEM;
+ boxLookup_start:
+ if( parentArrayReturn ) *parentArrayReturn = box;
+ if( box->size & 1 || box->nDims != 1 ){
+  *infoReturn = 1;
+  interp->errorMessage = (box->nDims == 1) ? "tried to boxaccess on an array which is not a box (odd number of items)" : "tried to boxaccess on an array which is not a box (dimensions > 1)";
+  *errorReturn = ERRORITEM( *p );
+  return NULL;
+ }
+ // move past ':'
+ getItem(p);
+ // get the key. we support numbers and symbols as box keys
+ char *keyP = *p;  key = getItem(p);
+ boxLookup_checkKey:
+ switch( key.type ){
+  case NUMBER:  case STRING:  break; 
+  case SYMBOL:  key.type = STRING;  break;
+  case LPAREN:  *p = keyP;  key = getValue(interp, p);  if( key.type == ERROR ){  *infoReturn = 1;  *errorReturn = key;  return NULL;  }
+   goto boxLookup_checkKey;
+  default:
+   deleteItem( &key );
+   *infoReturn = 1;
+   interp->errorMessage = "invalid box access: box keys can only be numbers, strings, or symbols";
+   *errorReturn = ERRORITEM( *p );
+   return NULL;
+ }
+ // search the box for matching key
+ for(  size_t i = 0;  i < box->size;  i += 2  ){
+  if(  box->itemArray[i].type == key.type
+        &&
+       ( key.type == NUMBER 
+          ?
+         ( key.data.number == box->itemArray[i].data.number )
+          :
+         ( key.data.string.length && stringsMatch( & key.data.string, & box->itemArray[i].data.string ) )
+       ) 
+   ){
+   // the keys matched
+   itemPtr = box->itemArray + i + 1;
+   if( key.type == STRING && key.data.string.refCount ){  deleteItem(&key);  key.type = UNDEFINED;  }
+   // support for boxes that contain boxes
+   if( itemPtr->type == ARRAY && peekItem(p).type == BOXACCESS ){
+    box = itemPtr->data.array;
+    goto boxLookup_start;
+   }
+   return itemPtr;
+  }
+ }
+ // no match for key was found
+ switch( notFoundAction ){
+  default: 
+   fprintf( stderr, "oh no, boxLookup bad notFoundAction '%d'\n", notFoundAction );
+   exit(1);
+  case BLU_RETURN:  deleteItem( &key );  return NULL;
+  case BLU_ERROR:
+   deleteItem( &key );
+   *infoReturn = 1;
+   interp->errorMessage = "box access: no match found for key";
+   *errorReturn = ERRORITEM( *p );
+   return NULL;
+  case BLU_CREATE: {
+   size_t index = box->size;
+   expandSimpleArray( box, 2 ); 
+   struct item  keyCopy = key;  if( keyCopy.type == STRING ){  keyCopy.data.string.refCount = NULL;  } // If key is a string, we want to ensure a new copy of the string is made for the key
+   storeItem( &box->itemArray[ index ], &keyCopy, box ); /* Store the key */
+   if( key.type == STRING ){ 
+    *box->itemArray[ index ].data.string.refCount -= 1; /* Delete the 'free floating instance' of the key string */
+    if( key.data.string.refCount ) deleteItem( &key );
+   }
+   return box->itemArray + index + 1;
+  }
+ }
+ deleteItem( &key );
+ return NULL;
+}
+
+enum lookupItemPtrCreateOptions { LUIP_CreateVars = 0b0001, LUIP_CreateBoxes = 0b0010 };
+
+struct item*  lookupItemPtr( struct interp *interp, char **p, struct item *symbol, int *infoReturn, struct array **parentArrayReturn, int createIfNotFound ){
  struct var *var = lookupVarByName( interp, &symbol->data.string );
  // Unbound symbol case
- if( ! var ){  return NULL;  }
- if(  (var->value->type == ARRAY) && (peekItem(p).type == LBRACKET)  ){
+ if( ! var ){
+  if( createIfNotFound & LUIP_CreateVars ){
+    // if variable didn't exist, we create it now
+   var = makeVar( UNDEFINEDITEM, symbol->data.string );  installVar( interp, var);
+   return var->value;
+  }
+  return NULL;
+ }
+ struct item peeked = peekItem(p);
+ if(  (var->value->type == ARRAY) && (peeked.type == LBRACKET)  ){
   // Array indexing case
   struct item *itemPtr = indexIntoArray( interp, p, symbol, var->value->data.array, infoReturn, parentArrayReturn );
   lookupItemPtr_array_indexing_loop:
@@ -421,6 +533,12 @@ struct item*  lookupItemPtr( struct interp *interp, char **p, struct item *symbo
    itemPtr = indexIntoArray( interp, p, symbol, itemPtr->data.array, infoReturn, parentArrayReturn );
    if( !*infoReturn && itemPtr->type == ARRAY) goto lookupItemPtr_array_indexing_loop;
   }
+  return itemPtr;
+ }else if(  (var->value->type == ARRAY) && (peeked.type == BOXACCESS)  ){
+  // Box access
+  struct array *parentArray;
+  struct item *itemPtr = boxLookup( interp, p,  var->value->data.array, (createIfNotFound & LUIP_CreateBoxes) ? BLU_CREATE : BLU_ERROR, symbol, infoReturn, &parentArray );
+  if( parentArrayReturn ) *parentArrayReturn = parentArray;
   return itemPtr;
  }else{
   // Normal variable access case
@@ -438,7 +556,7 @@ struct item  getValueByType( struct interp *interp, char **p, int type ){
   if( result.type == UNDEFINED ){
    switch( type ){
     case NUMBER:  return NUMBERITEM(0);
-    case STRING:  return (struct item){ STRING, { .string = (struct string){ NULL, 0, "" } }};
+    case STRING:  return EMPTYSTRINGITEM;
    }
   }
   interp->errorMessage = (result.type == NOTHING) ? "expected a value" : typeMismatchString[type];
@@ -520,7 +638,27 @@ int skipParen( char **p ){
  return level;
 }
 
-struct array* makeSimpleArray( struct item *value ){
+struct array* createArray( unsigned int *dims, unsigned int nDims ){
+ struct array *array = calloc( 1, sizeof(struct array) );
+ array->nDims = nDims;  array->dims = calloc( nDims, sizeof(unsigned int) );  array->refCount = 1;
+ size_t arraySize = 0;
+ int i; for( i=0; i<nDims; i++){
+  array->dims[i] = dims[i];  arraySize = arraySize * dims[i] + dims[i];
+ }
+ array->size = arraySize;
+ array->itemArray = calloc( arraySize, sizeof(struct item) );
+ if( ! array->itemArray ){
+  free( array->dims );  free( array );
+  return NULL;
+ }
+ return array;
+}
+
+struct array* createEmptySimpleArray(){
+ unsigned int dims = 0;  struct array *a = createArray( &dims, 1 );  return a;
+}
+
+struct array* createSimpleArray( struct item *value ){
  struct array *array = calloc( 1, sizeof(struct array) );
  array->refCount = 1;  array->nDims = 1;  array->dims = calloc( 1, sizeof(unsigned int) );  array->dims[0] = 1;  array->size = 1;
  array->itemArray = calloc( 1, sizeof(struct item) );
@@ -534,6 +672,14 @@ void appendItemToSimpleArray( struct array *array, struct item *value ){
  (array->itemArray + (array->size - 1))->type = NOTHING;
  storeItem( array->itemArray + (array->size - 1), value, array );
  deleteItem( value );
+}
+
+void expandSimpleArray( struct array *array, size_t n ){
+ size_t oldsize = array->size;
+ array->dims[0] += n;  array->size += n;  array->itemArray = realloc( array->itemArray, sizeof(struct item)*array->size );
+ for(  size_t i = oldsize;  i < array->size;  i++  ){
+  array->itemArray[i] = UNDEFINEDITEM;
+ }
 }
 
 #define ADDVAR(LIST,CURR,NEWVAR) {struct var *_NEW = NEWVAR; if( !LIST ) { LIST = _NEW;  CURR = _NEW; } else { CURR->next = _NEW;  CURR = _NEW; }}
@@ -652,10 +798,19 @@ struct item  primitive_Return( struct interp *interp, char **p ){
 #define VAR_IS_REF(VAR) (VAR->flags & VARREF)
 #define VAR_IS_REST(VAR) (VAR->flags & VARREST)
 
+void insertVar( struct var **dest, struct var *tail, struct var *head ){
+ struct var *b = *dest;
+ tail->next = b;
+ if( b ) b->prev = tail;
+ *dest = head;
+ //if( head->prev ){  fprintf( stderr, "oh no: FUCK\n" );  int blah = system( "Shia" );  exit(1 | blah);  }
+}
+
 struct item  callFunc( struct interp *interp, struct func *func, char **p ){
  if( interp->contextLevel + interp->evalLevel >= interp->levelLimit ){  interp->errorMessage = "function call: exceeded recursion limit";  return ERRORITEM(*p);  }
  struct var *previousTopVar = interp->vars;
  interp->contextLevel += 1;  unsigned int thisContextLevel = interp->contextLevel;
+ //fprintf( stderr, "callFunc	inc now, interp->contextLevel == %d\n", interp->contextLevel );
  struct item result = UNDEFINEDITEM;
  struct var *createdVars = NULL;  struct var *lastCreated = NULL;  struct var *createdNewVars = NULL; struct var *lastCreatedNewVar = NULL;
  struct var *curParam = func->params;
@@ -667,7 +822,7 @@ struct item  callFunc( struct interp *interp, struct func *func, char **p ){
    if( symbol.type != SYMBOL ){  interp->errorMessage = "function call: expected name for variable passed by reference";  goto callfunc_failure;  }
    // ----
    int infoReturn = 0;  struct array *refVarParentArray = NULL;
-   struct item *refItem = lookupItemPtr( interp, p, &symbol, &infoReturn, &refVarParentArray );
+   struct item *refItem = lookupItemPtr( interp, p, &symbol, &infoReturn, &refVarParentArray, LUIP_CreateBoxes );
    if( infoReturn ){  result = symbol;  goto callfunc_failure;  }
    if( !refItem ){  
     // create var that didn't exist
@@ -688,11 +843,10 @@ struct item  callFunc( struct interp *interp, struct func *func, char **p ){
  }
  // install the created locals 
  if( createdVars ){
-  lastCreated->next = interp->vars;  if( interp->vars ) interp->vars->prev = lastCreated;
-  interp->vars = createdVars;
+  insertVar( &interp->vars, lastCreated, createdVars );
  }
  // evaluate the function body
- result = eval( interp, func->body );  interp->contextLevel -= 1;
+ result = eval( interp, func->body );  interp->contextLevel -= 1;  //fprintf( stderr, "callFunc	dec now, interp->contextLevel == %d\n", interp->contextLevel );
  // Catch return exception
  if( interp->errorMessage == returnExceptionMsg ){  result = interp->returnValue;  interp->returnValue.type = 0;  interp->errorMessage = "retexp";  }
  // If the result is a string directly from the program text (doesn't have its own space) we must copy it now or else it'll get destroyed by the cleanup
@@ -705,7 +859,7 @@ struct item  callFunc( struct interp *interp, struct func *func, char **p ){
   varP = nextVar;  if( ! varP || varP==previousTopVar ) break;  
  }
  if( createdNewVars ){
-  lastCreatedNewVar->next = interp->vars;  interp->vars = createdNewVars;
+  insertVar( &interp->vars, lastCreatedNewVar, createdNewVars );
  }
  return result; 
  callfunc_failure:
@@ -955,15 +1109,13 @@ struct item  primitive_Set( struct interp *interp, char **p ){
   return ERRORITEM(*p);
  }
  // look up the variable/array item specified
- int infoReturn = 0;  struct array *parentArray = NULL;  struct item *itemPtr = lookupItemPtr( interp, p, &varName, &infoReturn, &parentArray );
+ int infoReturn = 0;  struct array *parentArray = NULL;  struct item *itemPtr = lookupItemPtr( interp, p, &varName, &infoReturn, &parentArray, LUIP_CreateBoxes | LUIP_CreateVars );
  if( infoReturn ) return varName; // this handles case of array indexing failure
  // get the value to be stored
  struct item value = getValue( interp, p );  if( value.type == ERROR ) return value; 
  if( !isValue(value.type) ){  interp->errorMessage = "set: must be given a value";  return ERRORITEM(*p);  }
- // if variable didn't exist, we create it now
- if( ! itemPtr ) {
-  struct var *var = makeVar( UNDEFINEDITEM, varName.data.string );  installVar( interp, var);  itemPtr = var->value;
- }
+ // lookupItemPtr is supposed to create new variables, so itemPtr should not be null.
+ if( ! itemPtr ) {  fprintf( stderr, "OH SHIT: primitive_Set\n" );  exit(1);  }
  // store the value
  storeItem( itemPtr, &value, parentArray );
  return value;
@@ -1222,12 +1374,14 @@ struct item  primitive_Foreach( struct interp *interp, char **p ){
   deleteItem( &array );  interp->errorMessage = "foreach: expected code block in parens";  return ERRORITEM(*p);
  }
  char *code_p = *p;
- if( array.type == UNDEFINED ){
+ struct array *arr = array.data.array;
+ // skip loop body in case of empty array
+ if( array.type == UNDEFINED || !arr->size ){
+  if( arr ) deleteItem( &array );
   *p = paren_p;
   if( skipParen(p) ){  interp->errorMessage = "missing ')'";  return ERRORITEM(code_p);  }
   return UNDEFINEDITEM;
  }
- struct array *arr = array.data.array;
  // create loop variable
  struct var *var = installVar( interp, makeVar( UNDEFINEDITEM, varName.data.string ) );  struct item *itemPtr = var->value;
  var->flags = VARMANAGED;
@@ -1314,10 +1468,10 @@ struct item primitive_CatS( struct interp *interp, char **p ){
    if( buf ){
     buf[length] = 0;  unsigned int *refCount = malloc(sizeof(unsigned int));  *refCount = 1;  return (struct item){ STRING, { .string = (struct string){ refCount, length, buf } } };
    }else{
-    return (struct item){ STRING, { .string = (struct string){ NULL, 0, "" } } };
+    return EMPTYSTRINGITEM;
    }
   }else if( item.type == UNDEFINED ){
-   item.type = STRING;  item.data.string = (struct string){ NULL, 0, "" };
+   item = EMPTYSTRINGITEM;
   }else if( item.type != STRING ){
    deleteItem( &item );  interp->errorMessage = "cat$: expected string";  item = ERRORITEM(*p);  break;
   }
@@ -1461,6 +1615,35 @@ struct item primitive_CompareS( struct interp *interp, char **p ){
  return out;
 }
 
+struct item primitive_InstrS_( struct interp *interp, char **p, int direction ){
+ struct item a = getString(interp,p);  if( a.type == ERROR ) return a;
+ struct item b = getString(interp,p);  if( b.type == ERROR ){  deleteItem(&a);  return b;  }
+ double result = -1;
+ if( ! b.data.string.length || b.data.string.length > a.data.string.length ){
+  goto InstrS_exit;
+ }
+ unsigned int start, end, step;
+ if( ! direction ){
+  start = 0;  end = a.data.string.length - b.data.string.length + 1;  step = 1;
+ }else{
+  start = a.data.string.length - 1;  end = -1;  step = -1;
+ }
+ char *sa = a.data.string.s, *sb = b.data.string.s;  unsigned int l = b.data.string.length;
+ for(  unsigned int i = start;  i != end;  i+= step  ){
+  if( sa[i] == sb[0] && sa[i+l-1] == sb[l-1] && ! strncmp( sa+i, sb, l ) ){  result = i;  break;  }
+ }
+ InstrS_exit:
+ deleteItem( &a );  deleteItem( &b );  return NUMBERITEM( result );
+}
+
+struct item primitive_FirstS( struct interp *interp, char **p ){
+ return primitive_InstrS_( interp, p, 0 );
+}
+
+struct item primitive_LastS( struct interp *interp, char **p ){
+ return primitive_InstrS_( interp, p, 1 );
+}
+
 struct item primitive_Fract( struct interp *interp, char **p ){
  struct item n = getNumber( interp,p ); if( n.type == ERROR ) return n;
  n.data.number = n.data.number - (long long int) n.data.number;
@@ -1480,16 +1663,8 @@ struct item primitive_Array( struct interp *interp, char **p ){
   nDims ++;
  }
  if( ! nDims ){  return UNDEFINEDITEM;  /*interp->errorMessage = "array: syntax error: can't make an array with no dimensions";  return ERRORITEM(*p);*/  }
- struct array *array = calloc( 1, sizeof(struct array) );
- array->nDims = nDims;  array->dims = calloc( nDims, sizeof(unsigned int) );  array->refCount = 1;
- size_t arraySize = 0;
- int i; for( i=0; i<nDims; i++){
-  array->dims[i] = dims[i];  arraySize = arraySize * dims[i] + dims[i];
- }
- array->size = arraySize;
- array->itemArray = calloc( arraySize, sizeof(struct item) );
- if( ! array->itemArray ){
-  free( array->dims );  free( array );
+ struct array *array = createArray( dims, nDims );
+ if( ! array ){
   interp->errorMessage = "failed to create array";  return ERRORITEM(*p);
  }
  struct item out;  out.type = ARRAY;  out.data.array = array;  return out;
@@ -1502,15 +1677,12 @@ struct item  primitive_ItemType( struct interp *interp, char **p ){
 }
 
 struct item primitive_MakeArray( struct interp *interp, char **p ){
- struct array *array = NULL;  struct item arr;  arr.type = ARRAY;
+ struct array *array = createEmptySimpleArray();  struct item arr;  arr.type = ARRAY;
+ if( array == NULL ){  interp->errorMessage = "make-array: couldn't create array";  return ERRORITEM(*p);  }
  struct item value;
  while( paramsRemain(p) ){
   value = getValue(interp,p);  if( value.type == ERROR) goto primitive_makearray_failure;
-  if( ! array ){
-   array = makeSimpleArray( &value );
-  }else{
-   appendItemToSimpleArray( array, &value );
-  }
+  appendItemToSimpleArray( array, &value );
  }
  if( ! array ) return UNDEFINEDITEM;
  arr.data.array = array;
@@ -1578,10 +1750,10 @@ struct item primitive_Append( struct interp *interp, char **p ){
  struct item b = getValue( interp, p );  if( b.type == ERROR ){  deleteItem( &a );  return b;  }
  if( b.type == NOTHING ){  deleteItem( &a );  interp->errorMessage = "append: expected a value";  return ERRORITEM(*p);  }
  if( a.type == UNDEFINED ){
-  struct item out;  out.type = ARRAY;  out.data.array = makeSimpleArray( &b );
+  struct item out;  out.type = ARRAY;  out.data.array = createSimpleArray( &b );
   return out;
  }else{
-  appendItemToSimpleArray( a.data.array, &b ); // we don't need to delete the free-floating reference of 'b', appendItemToSimpleArray does that
+  appendItemToSimpleArray( a.data.array, &b ); // we don't need to delete the 'free floating' reference of 'b', appendItemToSimpleArray does that
   return a;
  }
 }
@@ -1591,6 +1763,20 @@ struct item  primitive_Dimensions( struct interp *interp, char **p ){
  if( array.type == UNDEFINED ){  out.data.number = 0;  return out;  }
  if( array.type != ARRAY ){  deleteItem( &array );  interp->errorMessage = "dimensions: expected an array";  return ERRORITEM(*p);  }
  out.data.number = array.data.array->nDims;  deleteItem( &array );  return out;
+}
+
+struct item  primitive_Dimension( struct interp *interp, char **p ){
+ struct item out;  struct item array = getValue(interp,p);
+ if( array.type == UNDEFINED ){  interp->errorMessage = "dimension: must be given an array";  return ERRORITEM(*p);  }
+ if( array.type != ARRAY ){  deleteItem( &array );  interp->errorMessage = "dimension: expected an array";  return ERRORITEM(*p);  }
+ struct item dimensionNumber = getNumber( interp, p );
+ if( dimensionNumber.data.number < 0 || dimensionNumber.data.number >= array.data.array->nDims ){
+  out = ERRORITEM(*p);  interp->errorMessage = "dimension: bad dimension number for array";
+ }else{
+  unsigned int n = dimensionNumber.data.number;  out = NUMBERITEM( array.data.array->dims[n] );
+ }
+ deleteItem( &array );
+ return out;
 }
 
 struct item  primitive_Length( struct interp *interp, char **p ){
@@ -1635,7 +1821,7 @@ struct item  primitive_Catch( struct interp *interp, char **p ){
  if( paramsRemain(p) ){
   struct item symbol = getItem(p);
   if( symbol.type != SYMBOL ){  deleteItem( &result );  interp->errorMessage = "catch: expected var name for optional return value";  return ERRORITEM(*p);  }
-  int infoReturn = 0;  returnValuePtr = lookupItemPtr( interp, p, &symbol, &infoReturn, &returnValuePtrParentArray  );
+  int infoReturn = 0;  returnValuePtr = lookupItemPtr( interp, p, &symbol, &infoReturn, &returnValuePtrParentArray,  LUIP_CreateBoxes );
   if( infoReturn ) return symbol;
   if( ! returnValuePtr && ! anErrorOccurred ) returnValuePtr = installVar( interp, makeVar( UNDEFINEDITEM, symbol.data.string ) )->value;
  }
@@ -1732,16 +1918,27 @@ struct item primitive_System( struct interp *interp, char **p ){
  deleteItem( &cmd );  return returnValue;
 }
 
+#ifdef MATHSLIB
+#include "rubish_maths.c"
+#endif
+
 struct interp*  makeInterp( struct interp *interp ){
  if( ! interp ) interp = calloc( 1, sizeof( struct interp ) );
  interp->errorMessage = "(C)2024 Rubish";
  interp->rndSeed = newRndSeed();
+ #ifdef INCLUDE_PROMPT
+ installPrimitive( interp, primitive_Prompt,		"prompt");
+ #endif
  #ifndef WIN32
  struct rlimit limit;  getrlimit (RLIMIT_STACK, &limit);  interp->levelLimit = limit.rlim_cur / 1024;
  installPrimitive( interp, primitive_InputReady,	"input-ready?");
  #else
  interp->levelLimit = DEFAULT_CALL_LIMIT;
  #endif
+ #ifdef MATHSLIB
+ installVar( interp, makeVar( box_MathsLibrary(), charPtrToString( "math" ) ) );
+ #endif
+ installPrimitive( interp, primitive_Dimension,		"dimension" );
  installPrimitive( interp, primitive_System,		"system");
  installPrimitive( interp, primitive_Same,		"same?");
  installPrimitive( interp, primitive_NewRndSeed, 	"get-new-rnd-seed" );
@@ -1782,6 +1979,8 @@ struct interp*  makeInterp( struct interp *interp ){
  installPrimitive( interp, primitive_Func,		"func" );
  installPrimitive( interp, primitive_Array,		"array" );
  installPrimitive( interp, primitive_Wait,		"wait" );
+ installPrimitive( interp, primitive_FirstS,		"first$" );
+ installPrimitive( interp, primitive_LastS,		"last$" );
  installPrimitive( interp, primitive_CompareS,		"compare$" );
  installPrimitive( interp, primitive_CatS,		"cat$" );
  installPrimitive( interp, primitive_RangeS,		"range$" );
@@ -1903,7 +2102,7 @@ struct item  charPtrsToArray( int argc, char **argv ){
   if( array )
    appendItemToSimpleArray( array, &stringItem );
   else
-   array = makeSimpleArray( &stringItem );
+   array = createSimpleArray( &stringItem );
  }
  struct item out;  out.type = ARRAY;  out.data.array = array;  return out;
 }
@@ -1976,6 +2175,10 @@ void Rubish_prompt( struct interp *interp ){
  #include "prompt.c"
  printf( "Rubish prompt\n" );
  eval( interp, (char*) prompt_rubish );
+}
+struct item primitive_Prompt( struct interp *interp, char **p ){
+ Rubish_prompt( interp );
+ return UNDEFINEDITEM;
 }
 #endif
 
